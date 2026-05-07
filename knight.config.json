@@ -32,5 +32,11 @@
   "reflection": {
     "min_pattern_count": 2,
     "auto_write": true
+  },
+  "model": {
+    "provider": "anthropic",
+    "name": "claude-sonnet-4-5",
+    "max_tokens": 8096,
+    "system_prompt_files": ["SOUL.md", "AGENTS.md", "MEMORY.md", "REDLINES.md"]
   }
 }

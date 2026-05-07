@@ -27,6 +27,16 @@ The init wizard will ask you:
 
 Then it writes all framework files into your workspace, personalized with your answers.
 
+## Chat
+
+```bash
+knight chat
+```
+
+Starts an interactive chat session with your AI companion. Your workspace files (SOUL.md, MEMORY.md, AGENTS.md) are automatically loaded as the system prompt.
+
+**Prerequisites:** Anthropic API key configured via `knight init` or set as `ANTHROPIC_API_KEY` in your workspace `.env` file.
+
 ## Runtime Features
 
 ```bash
@@ -90,6 +100,7 @@ Memory is organized in layers with clear promotion rules:
 
 ```bash
 knight init      # Initialize a new workspace
+knight chat      # Start interactive AI chat session
 knight status    # Check workspace file status
 knight version   # Show version number
 ```

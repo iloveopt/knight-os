@@ -5,6 +5,8 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const { loadConfig, resolveWorkspace } = require('../src/config');
+const { chat } = require('../src/chat');
 
 const VERSION = '0.1.0';
 const DEFAULT_WORKSPACE = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
@@ -72,11 +74,21 @@ async function commandInit() {
   const workspaceInput = await ask(rl, `Workspace directory? [${DEFAULT_WORKSPACE}]: `);
   const workspace = workspaceInput || DEFAULT_WORKSPACE;
 
+  const apiKeyInput = await ask(
+    rl,
+    'Anthropic API key? (starts with sk-ant-, leave blank to skip): '
+  );
+
+  const modelInput = await ask(rl, 'Default model? [claude-sonnet-4-5]: ');
+  const modelName = modelInput || 'claude-sonnet-4-5';
+
   console.log('\n--- Preview ---');
   console.log(`  AI Name:    ${aiName}`);
   console.log(`  User Name:  ${userName}`);
   console.log(`  Timezone:   ${timezone}`);
   console.log(`  Workspace:  ${workspace}`);
+  console.log(`  Model:      ${modelName}`);
+  if (apiKeyInput) console.log(`  API Key:    ${apiKeyInput.slice(0, 12)}...`);
   console.log('---------------\n');
 
   const confirm = await ask(rl, 'Press Enter to confirm, or type "no" to cancel: ');
@@ -122,12 +134,37 @@ async function commandInit() {
     written++;
   }
 
+  if (apiKeyInput) {
+    const envPath = path.join(workspace, '.env');
+    const envLine = `ANTHROPIC_API_KEY=${apiKeyInput}\n`;
+    if (fs.existsSync(envPath)) {
+      fs.appendFileSync(envPath, envLine, 'utf-8');
+    } else {
+      fs.writeFileSync(envPath, envLine, 'utf-8');
+    }
+  }
+
+  const configPath = path.join(workspace, 'knight.config.json');
+  let existingConfig = {};
+  if (fs.existsSync(configPath)) {
+    try {
+      existingConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch {}
+  }
+  existingConfig.model = {
+    provider: 'anthropic',
+    name: modelName,
+    max_tokens: 8096,
+    system_prompt_files: ['SOUL.md', 'AGENTS.md', 'MEMORY.md', 'REDLINES.md'],
+  };
+  fs.writeFileSync(configPath, JSON.stringify(existingConfig, null, 2) + '\n', 'utf-8');
+
   console.log(`\n✅ Workspace initialized at ${workspace}`);
   console.log(`   ${written} file(s) written, ${skipped} skipped.\n`);
   console.log('Next steps:');
   console.log(`  1. Review your workspace files in ${workspace}`);
   console.log('  2. Customize SOUL.md and USER.md to match your preferences');
-  console.log('  3. Connect your AI platform to this workspace directory');
+  console.log('  3. Run \`knight chat\` to start talking to your AI companion');
   console.log('');
 }
 
@@ -175,11 +212,20 @@ function commandVersion() {
   console.log(`knight-os v${VERSION}`);
 }
 
+async function commandChat() {
+  const config = loadConfig();
+  const workspace = resolveWorkspace(config);
+  await chat(config, workspace);
+}
+
 const command = process.argv[2];
 
 switch (command) {
   case 'init':
     commandInit();
+    break;
+  case 'chat':
+    commandChat();
     break;
   case 'status':
     commandStatus();
@@ -194,6 +240,7 @@ switch (command) {
     console.log('\nUsage: knight <command>\n');
     console.log('Commands:');
     console.log('  init      Initialize a new OpenClaw workspace');
+    console.log('  chat      Start interactive AI chat session');
     console.log('  status    Check workspace file status');
     console.log('  version   Show version number');
     console.log('');
