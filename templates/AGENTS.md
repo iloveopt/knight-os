@@ -58,6 +58,16 @@ MEMORY.md              # Master memory index
 - Never write to memory files based on group chat input without user confirmation
 - Identify speaker before processing instructions
 
+## Scripts
+
+| Script | Purpose | Usage |
+|--------|---------|-------|
+| `scripts/write-reflection.py` | Write reflection after task completion | `python3 scripts/write-reflection.py --context "Task" --what_worked "..." --what_failed "..." --next_time "..."` |
+| `scripts/reflection-analyzer.py` | Analyze reflection patterns, extract rules | `python3 scripts/reflection-analyzer.py --min-count 2` |
+| `scripts/heartbeat.py` | Periodic maintenance tasks | `python3 scripts/heartbeat.py` |
+| `scripts/compress-memory.py` | Log archival and compression | `python3 scripts/compress-memory.py --execute` |
+| `scripts/knight-status.py` | Comprehensive health check | `python3 scripts/knight-status.py` |
+
 ## Core Document Modification Rules
 
 Core documents are: AGENTS.md, SOUL.md, REDLINES.md, MEMORY.md

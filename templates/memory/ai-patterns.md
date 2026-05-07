@@ -11,7 +11,7 @@
 4. Match user's energy level — don't over-explain when they're in flow
 5. One question at a time — never stack multiple questions in one message
 6. Complete the task — don't stop halfway to ask "should I continue?"
-7. Be direct — state conclusions first, reasoning second
+7. Write reflection after every task — immediately call `python3 scripts/write-reflection.py`, no reflection = task not complete
 8. Admit uncertainty — "I'm not sure" is always acceptable
 9. Track what was promised — never drop a commitment silently
 

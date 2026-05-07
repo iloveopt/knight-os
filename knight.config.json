@@ -1,0 +1,36 @@
+{
+  "workspace": "~/.openclaw/workspace",
+  "ai_name": "Knight",
+  "user_name": "User",
+  "timezone": "UTC",
+  "storage": {
+    "backend": "local",
+    "local": {
+      "reflections_dir": "memory/reflections",
+      "logs_dir": "memory/logs",
+      "memory_file": "MEMORY.md"
+    },
+    "supabase": {
+      "url": "",
+      "service_key": "",
+      "enabled": false
+    }
+  },
+  "notifications": {
+    "backend": "none",
+    "telegram": {
+      "bot_token": "",
+      "chat_id": "",
+      "enabled": false
+    }
+  },
+  "heartbeat": {
+    "interval_hours": 6,
+    "enabled": false,
+    "tasks": ["reflection_analysis", "memory_scan", "log_compress"]
+  },
+  "reflection": {
+    "min_pattern_count": 2,
+    "auto_write": true
+  }
+}

@@ -27,6 +27,29 @@ The init wizard will ask you:
 
 Then it writes all framework files into your workspace, personalized with your answers.
 
+## Runtime Features
+
+```bash
+# After completing a task, write a reflection
+python3 scripts/write-reflection.py \
+  --context "What you did" \
+  --what_worked "What went well" \
+  --what_failed "What did not work" \
+  --next_time "How to improve"
+
+# Run heartbeat (maintenance tasks)
+python3 scripts/heartbeat.py
+
+# Analyze patterns from reflections
+python3 scripts/reflection-analyzer.py
+
+# Check workspace health
+python3 scripts/knight-status.py
+
+# Archive old logs
+python3 scripts/compress-memory.py --execute
+```
+
 ## File Reference
 
 | File | Purpose |
@@ -41,6 +64,9 @@ Then it writes all framework files into your workspace, personalized with your a
 | `memory/TEMPLATE-daily.md` | Daily report template |
 | `memory/ai-patterns.md` | AI behavior rules — learned from feedback |
 | `memory/user-patterns.md` | User observation records — patterns and preferences |
+| `scripts/` | Runtime scripts — reflection, analysis, heartbeat, compression, status |
+| `knight.config.json` | Default configuration template |
+| `src/config.js` | Unified config loader module |
 
 ## Core Principles
 
