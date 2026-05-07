@@ -1,0 +1,24 @@
+{
+  "name": "knight-os",
+  "version": "0.1.0",
+  "description": "AI companion OS for OpenClaw — memory, reflection, and identity framework",
+  "main": "bin/knight.js",
+  "bin": {
+    "knight": "./bin/knight.js"
+  },
+  "scripts": {
+    "test": "node bin/knight.js version"
+  },
+  "keywords": [
+    "openclaw",
+    "ai",
+    "workspace",
+    "agent",
+    "memory"
+  ],
+  "author": "",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
