@@ -38,6 +38,16 @@ After setup, start chatting via OpenClaw:
 openclaw chat
 ```
 
+### Custom workspace path
+
+If your OpenClaw workspace is not at the default `~/.openclaw/workspace`, enter your path when prompted:
+
+```
+Workspace directory [~/.openclaw/workspace]: /workspace/projects
+```
+
+Knight OS will write all files there and OpenClaw will pick them up automatically.
+
 ---
 
 ## How Memory Works
