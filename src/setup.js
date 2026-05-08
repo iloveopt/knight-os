@@ -214,14 +214,42 @@ async function setup() {
   const workspaceExists = fs.existsSync(workspace);
   const hasCoreFiles = workspaceExists && fs.existsSync(path.join(workspace, 'AGENTS.md'));
 
-  let overwrite = true;
+  // Files that contain user's personal memory/identity — never overwrite by default
+  const PROTECTED_FILES = ['SOUL.md', 'MEMORY.md', 'USER.md', 'REDLINES.md'];
+  const hasPersonalMemory = hasCoreFiles && PROTECTED_FILES.some(
+    f => fs.existsSync(path.join(workspace, f))
+  );
+
+  let overwrite = false;
+  let overwriteProtected = false;
+
   if (hasCoreFiles) {
-    console.log(`\n⚠️  Workspace already exists at: ${workspace}`);
-    const answer = await ask(rl, 'Overwrite existing files? (y/N)', 'N');
-    overwrite = answer.toLowerCase().startsWith('y');
-    if (!overwrite) {
-      console.log('\nSkipping template write. Continuing with other setup steps...');
+    if (hasPersonalMemory) {
+      console.log(`\n⚠️  Existing OpenClaw workspace detected at: ${workspace}`);
+      console.log('   Protected files found: SOUL.md, MEMORY.md, USER.md, REDLINES.md');
+      console.log('   These contain your personal memory and identity.\n');
+      console.log('   Knight OS will add missing files and update scripts/templates.');
+      console.log('   Your existing memory files will NOT be touched.\n');
+      const answer = await ask(rl, 'Also overwrite protected files? (y/N)', 'N');
+      overwriteProtected = answer.toLowerCase().startsWith('y');
+      if (overwriteProtected) {
+        console.log('\n  ⚠️  Protected files WILL be overwritten. Existing content will be lost.');
+      } else {
+        console.log('\n  ✅ Protected files preserved. Only missing/new files will be added.');
+      }
+      overwrite = true; // always write non-protected files (scripts, AGENTS.md, HEARTBEAT.md, PROJECTS.md)
+    } else {
+      console.log(`\n⚠️  Workspace already exists at: ${workspace}`);
+      const answer = await ask(rl, 'Overwrite existing files? (y/N)', 'N');
+      overwrite = answer.toLowerCase().startsWith('y');
+      overwriteProtected = overwrite;
+      if (!overwrite) {
+        console.log('\nSkipping template write. Continuing with other setup steps...');
+      }
     }
+  } else {
+    overwrite = true;
+    overwriteProtected = true;
   }
 
   // Create required dirs
@@ -297,15 +325,32 @@ async function setup() {
         .replace(/\{\{CHANNEL\}\}/g, 'direct');
     }
 
-    function copyTemplates(srcDir, destDir) {
+    function copyTemplates(srcDir, destDir, isRoot) {
       const entries = fs.readdirSync(srcDir, { withFileTypes: true });
       for (const entry of entries) {
         const src = path.join(srcDir, entry.name);
         const dest = path.join(destDir, entry.name);
         if (entry.isDirectory()) {
           fs.mkdirSync(dest, { recursive: true });
-          copyTemplates(src, dest);
+          copyTemplates(src, dest, false);
         } else {
+          // Check if this is a protected file (root level only)
+          const isProtected = isRoot && PROTECTED_FILES.includes(entry.name);
+          if (isProtected && !overwriteProtected) {
+            if (!fs.existsSync(dest)) {
+              // File doesn't exist yet — safe to create
+              try {
+                const content = fs.readFileSync(src, 'utf-8');
+                fs.writeFileSync(dest, fillTemplate(content, vars), 'utf-8');
+                console.log(`  ✅ ${path.relative(workspace, dest)}`);
+              } catch (e) {
+                console.log(`  ⚠️  ${path.relative(workspace, dest)}: ${e.message}`);
+              }
+            } else {
+              console.log(`  🔒 ${path.relative(workspace, dest)} (protected, skipped)`);
+            }
+            continue;
+          }
           try {
             const content = fs.readFileSync(src, 'utf-8');
             fs.writeFileSync(dest, fillTemplate(content, vars), 'utf-8');
@@ -317,7 +362,7 @@ async function setup() {
       }
     }
 
-    copyTemplates(TEMPLATES_DIR, workspace);
+    copyTemplates(TEMPLATES_DIR, workspace, true);
   } else {
     console.log('  ⏭️  Templates skipped (existing files preserved)');
   }
