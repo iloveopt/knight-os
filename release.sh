@@ -12,6 +12,16 @@ if [[ "$TYPE" != "patch" && "$TYPE" != "minor" && "$TYPE" != "major" ]]; then
   exit 1
 fi
 
+# Load NPM_TOKEN from workspace .env if available
+ENV_FILE="$HOME/.openclaw/workspace/.env"
+if [ -f "$ENV_FILE" ]; then
+  export $(grep -E '^NPM_TOKEN=' "$ENV_FILE" | xargs) 2>/dev/null || true
+fi
+
+if [ -n "$NPM_TOKEN" ]; then
+  echo "//registry.npmjs.org/:_authToken=$NPM_TOKEN" > ~/.npmrc
+fi
+
 echo "🔖 Bumping $TYPE version..."
 npm version $TYPE -m "release: v%s"
 
