@@ -12,6 +12,7 @@
 | MEMORY.md | Long-term memory index and quick-reference |
 | memory/user-patterns.md | Observed user behavior patterns |
 | memory/ai-patterns.md | {{AI_NAME}}'s learned behavior rules |
+| PROJECTS.md | Active project index |
 | HEARTBEAT.md | Periodic self-check mechanism |
 | USER.md | User profile and preferences |
 | TOOLS.md | Available tools and credentials reference |
@@ -34,6 +35,7 @@ On session start, read files in this order:
 6. `memory/ai-patterns.md` (load own behavior rules)
 7. `USER.md` (load user profile)
 8. `TOOLS.md` (load available tools)
+9. `PROJECTS.md` (load project index — on-demand per project)
 
 ## Memory Structure Quick Reference
 
