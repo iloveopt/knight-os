@@ -7,6 +7,7 @@ const path = require('path');
 const readline = require('readline');
 const { loadConfig, resolveWorkspace } = require('../src/config');
 const { chat } = require('../src/chat');
+const { setup } = require('../src/setup');
 
 const VERSION = '0.1.0';
 const DEFAULT_WORKSPACE = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
@@ -221,6 +222,9 @@ async function commandChat() {
 const command = process.argv[2];
 
 switch (command) {
+  case 'setup':
+    setup();
+    break;
   case 'init':
     commandInit();
     break;
@@ -239,7 +243,8 @@ switch (command) {
     console.log(`knight-os v${VERSION}`);
     console.log('\nUsage: knight <command>\n');
     console.log('Commands:');
-    console.log('  init      Initialize a new OpenClaw workspace');
+    console.log('  setup     Configure Knight OS for an existing OpenClaw installation');
+    console.log('  init      Initialize a new workspace (standalone, no OpenClaw required)');
     console.log('  chat      Start interactive AI chat session');
     console.log('  status    Check workspace file status');
     console.log('  version   Show version number');

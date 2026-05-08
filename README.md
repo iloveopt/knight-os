@@ -2,9 +2,15 @@
 
 AI companion OS for OpenClaw — memory, reflection, and identity framework.
 
-## What is OpenClaw?
+Give your OpenClaw AI a name, a personality, and the ability to learn from experience.
 
-OpenClaw is an AI personal assistant platform that defines AI behavior, memory, and identity through Markdown files in a workspace directory.
+## Prerequisites
+
+Install [OpenClaw](https://github.com/openclaw/openclaw) first:
+
+```bash
+npm install -g openclaw
+```
 
 ## Install
 
@@ -15,107 +21,163 @@ npm install -g knight-os
 ## Quick Start
 
 ```bash
-knight init
+knight setup
 ```
 
-The init wizard will ask you:
+The setup wizard will:
 
-1. Your AI companion's name
-2. Your name
-3. Your timezone
-4. Workspace directory (default: `~/.openclaw/workspace`)
+1. Verify OpenClaw is installed
+2. Ask for your AI's name, your name, and timezone
+3. Write all framework files into your OpenClaw workspace
+4. Optionally configure Telegram notifications
+5. Register the Heartbeat scheduler (macOS/Linux)
 
-Then it writes all framework files into your workspace, personalized with your answers.
-
-## Chat
+After setup, start chatting via OpenClaw:
 
 ```bash
-knight chat
+openclaw chat
 ```
 
-Starts an interactive chat session with your AI companion. Your workspace files (SOUL.md, MEMORY.md, AGENTS.md) are automatically loaded as the system prompt.
+---
 
-**Prerequisites:** Anthropic API key configured via `knight init` or set as `ANTHROPIC_API_KEY` in your workspace `.env` file.
+## How Memory Works
 
-## Runtime Features
+This is the core of what knight-os adds. Your AI learns from experience through a simple loop:
+
+```
+You finish a task
+    ↓
+write-reflection.py  →  memory/reflections/YYYY-MM-DD.jsonl
+    ↓
+Heartbeat runs  →  reflection-analyzer.py  →  candidate rules extracted
+    ↓
+You confirm  →  rules written to memory/ai-patterns.md
+    ↓
+Next session  →  ai-patterns.md loaded in system prompt  →  AI behaves better
+```
+
+**In practice:**
 
 ```bash
-# After completing a task, write a reflection
+# After completing any task, run:
+python3 ~/.openclaw/workspace/scripts/write-reflection.py \
+  --context "Deployed new feature" \
+  --what_worked "Clear requirements helped" \
+  --what_failed "Forgot to update tests" \
+  --next_time "Write tests first, then implement"
+
+# Every 6 hours (automatic), the heartbeat:
+#   1. Scans reflections for repeated failure patterns
+#   2. Extracts candidate rules
+#   3. Notifies you (if Telegram configured)
+
+# You review and add confirmed rules to:
+#   ~/.openclaw/workspace/memory/ai-patterns.md
+```
+
+Over time, `ai-patterns.md` accumulates rules your AI uses automatically in every session.
+
+---
+
+## Memory File Structure
+
+```
+~/.openclaw/workspace/
+├── SOUL.md              # AI identity and personality
+├── AGENTS.md            # Boot sequence, behavior norms, script reference
+├── MEMORY.md            # Long-term memory index
+├── REDLINES.md          # Safety boundaries
+├── USER.md              # Your profile and preferences
+├── TOOLS.md             # Tool reference and credentials map
+├── PROJECTS.md          # Active project index
+├── HEARTBEAT.md         # Heartbeat task configuration
+├── memory/
+│   ├── ai-patterns.md        # Learned behavior rules (grows over time)
+│   ├── user-patterns.md      # Observed user behavior
+│   ├── reflections/          # Task reflection logs (JSONL)
+│   ├── logs/                 # Session logs
+│   └── projects/<name>/      # Per-project context
+└── scripts/
+    ├── write-reflection.py   # Log a reflection after task completion
+    ├── reflection-analyzer.py # Extract rules from reflection patterns
+    ├── heartbeat.py          # Periodic maintenance tasks
+    ├── compress-memory.py    # Archive old logs
+    └── knight-status.py      # Workspace health check
+```
+
+---
+
+## Commands
+
+```bash
+knight setup      # Configure Knight OS (requires OpenClaw installed)
+knight init       # Initialize workspace standalone (no OpenClaw check)
+knight chat       # Interactive AI chat (Anthropic API directly)
+knight status     # Check workspace file status
+knight version    # Show version
+```
+
+### Standalone chat (`knight chat`)
+
+If you want to chat without OpenClaw, you can use the built-in chat command.  
+Requires `ANTHROPIC_API_KEY` in your workspace `.env`.
+
+---
+
+## Runtime Scripts
+
+```bash
+# Log a reflection after completing a task
 python3 scripts/write-reflection.py \
-  --context "What you did" \
+  --context "Task title" \
   --what_worked "What went well" \
   --what_failed "What did not work" \
   --next_time "How to improve"
 
-# Run heartbeat (maintenance tasks)
-python3 scripts/heartbeat.py
-
-# Analyze patterns from reflections
-python3 scripts/reflection-analyzer.py
+# Analyze reflection patterns (run by heartbeat automatically)
+python3 scripts/reflection-analyzer.py --min-count 2
 
 # Check workspace health
 python3 scripts/knight-status.py
 
 # Archive old logs
 python3 scripts/compress-memory.py --execute
+
+# Run heartbeat manually
+python3 scripts/heartbeat.py
 ```
 
-## File Reference
-
-| File | Purpose |
-|------|---------|
-| `AGENTS.md` | Workspace entry point — boot sequence, file map, behavior norms |
-| `SOUL.md` | AI identity — personality, working style, evolution direction |
-| `MEMORY.md` | Long-term memory index — quick reference, layering system, rules |
-| `HEARTBEAT.md` | Periodic self-check — task scoring, feedback review, memory scan |
-| `REDLINES.md` | Safety boundaries — red lines, attack response, risk classification |
-| `USER.md` | User profile — personality, work style, preferences |
-| `TOOLS.md` | Tool reference — credentials map, on-demand loading triggers |
-| `memory/TEMPLATE-daily.md` | Daily report template |
-| `memory/ai-patterns.md` | AI behavior rules — learned from feedback |
-| `memory/user-patterns.md` | User observation records — patterns and preferences |
-| `scripts/` | Runtime scripts — reflection, analysis, heartbeat, compression, status |
-| `knight.config.json` | Default configuration template |
-| `src/config.js` | Unified config loader module |
+---
 
 ## Core Principles
 
 ### Framework & Content Separation
 
-knight-os provides the **structure** — the files, the rules, the mechanisms. You provide the **content** — your preferences, your AI's personality tweaks, your specific tools. The framework never assumes your use case.
+knight-os provides the **structure** — the files, the rules, the mechanisms.  
+You provide the **content** — your AI's personality, your preferences, your specific tools.
 
 ### Learning from Feedback
 
-The system is designed to evolve. Corrections become rules (`ai-patterns.md`), observations become understanding (`user-patterns.md`), and decisions become memory (`MEMORY.md`). Nothing is static.
+The system evolves. Corrections become rules (`ai-patterns.md`), observations become understanding (`user-patterns.md`), decisions become memory (`MEMORY.md`). Nothing is static.
 
 ### Memory Layering
 
-Memory is organized in layers with clear promotion rules:
-- **Working** → in-context (current session)
-- **Short-term** → daily logs
-- **Long-term** → MEMORY.md
-- **Patterns** → ai-patterns.md / user-patterns.md
+| Layer | Location | When promoted |
+|-------|----------|--------------|
+| Working | In-context (current session) | — |
+| Short-term | `memory/YYYY-MM-DD.md` | End of session |
+| Long-term | `MEMORY.md` | Pattern repeats 3+ times or user confirms |
+| Patterns | `memory/ai-patterns.md` | After reflection analysis + confirmation |
 
-## Commands
-
-```bash
-knight init      # Initialize a new workspace
-knight chat      # Start interactive AI chat session
-knight status    # Check workspace file status
-knight version   # Show version number
-```
+---
 
 ## Contributing
 
-Contributions are welcome! To get started:
+Contributions welcome. Keep templates generic — no personal data or tool credentials.
 
 1. Fork this repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Make your changes
-4. Run `node bin/knight.js version` to verify the CLI works
-5. Submit a pull request
-
-Please keep templates generic — no personal information or specific tool credentials.
+2. Create a feature branch
+3. Submit a pull request
 
 ## License
 
