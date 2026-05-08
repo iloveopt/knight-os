@@ -14,11 +14,30 @@
     "ai",
     "workspace",
     "agent",
-    "memory"
+    "memory",
+    "reflection",
+    "identity",
+    "llm"
   ],
-  "author": "",
+  "author": "Steve Wang <steve@stevewang.ai>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/iloveopt/knight-os.git"
+  },
+  "homepage": "https://github.com/iloveopt/knight-os#readme",
+  "bugs": {
+    "url": "https://github.com/iloveopt/knight-os/issues"
+  },
   "engines": {
     "node": ">=16.0.0"
-  }
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "scripts/",
+    "templates/",
+    "README.md",
+    "LICENSE"
+  ]
 }
