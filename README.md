@@ -50,6 +50,54 @@ Knight OS will write all files there and OpenClaw will pick them up automaticall
 
 ---
 
+## Upgrading Safely
+
+When you install a new version of knight-os, your personal data is never touched.
+
+**Code and data live in separate places:**
+
+```
+npm upgrade knight-os
+  ↓
+Updates:  /usr/local/lib/node_modules/knight-os/   (program files)
+Ignores:  ~/.openclaw/workspace/                   (your data — always safe)
+```
+
+To apply any new templates or run data migrations:
+
+```bash
+knight upgrade
+```
+
+This will:
+
+1. Check if your workspace data format needs updating
+2. Create a full timestamped backup before making any changes
+3. Run any pending migrations (adds new files, never deletes yours)
+4. Add new template files introduced in the new version
+5. Leave protected files untouched: `SOUL.md`, `MEMORY.md`, `USER.md`, `REDLINES.md`
+
+Example output:
+
+```
+🔄 knight-os — Upgrade Check
+   Workspace: ~/.openclaw/workspace
+
+   📦 Backing up to .knight-backups/2026-05-11T14-51-43 …
+   ✅ Backup complete.
+   ⚙️  Migration 0→1: Bootstrap versioning
+   ✅ Done.
+
+   🔒 Protected files untouched:
+      SOUL.md, MEMORY.md, USER.md, REDLINES.md
+
+✅ Upgrade complete. Workspace is at data v1.
+```
+
+Backups are kept at `~/.openclaw/workspace/.knight-backups/` and can be used to roll back at any time.
+
+---
+
 ## How Memory Works
 
 This is the core of what knight-os adds. Your AI learns from experience through a simple loop:
@@ -101,12 +149,16 @@ Over time, `ai-patterns.md` accumulates rules your AI uses automatically in ever
 ├── TOOLS.md             # Tool reference and credentials map
 ├── PROJECTS.md          # Active project index
 ├── HEARTBEAT.md         # Heartbeat task configuration
+├── .knight-version      # Data format version (managed automatically)
+├── .knight-backups/     # Upgrade backups (managed automatically)
 ├── memory/
 │   ├── ai-patterns.md        # Learned behavior rules (grows over time)
 │   ├── user-patterns.md      # Observed user behavior
 │   ├── reflections/          # Task reflection logs (JSONL)
 │   ├── logs/                 # Session logs
-│   └── projects/<name>/      # Per-project context
+│   ├── projects/<name>/      # Per-project context
+│   ├── templates/            # Reusable task templates
+│   └── references/           # Reference documents
 └── scripts/
     ├── write-reflection.py   # Log a reflection after task completion
     ├── reflection-analyzer.py # Extract rules from reflection patterns
@@ -122,10 +174,21 @@ Over time, `ai-patterns.md` accumulates rules your AI uses automatically in ever
 ```bash
 knight setup      # Configure Knight OS (requires OpenClaw installed)
 knight init       # Initialize workspace standalone (no OpenClaw check)
+knight upgrade    # Safely migrate data + refresh templates after npm upgrade
 knight chat       # Interactive AI chat (Anthropic API directly)
 knight status     # Check workspace file status
 knight version    # Show version
 ```
+
+### `knight upgrade`
+
+Run this after every `npm upgrade knight-os` to apply new templates and data migrations.
+
+Safe by design:
+- Always backs up first, never migrates without a backup
+- Protected files (`SOUL.md`, `MEMORY.md`, `USER.md`, `REDLINES.md`) are never overwritten
+- Migrations only add or transform — they never delete your content
+- If something goes wrong, your backup is at `.knight-backups/<timestamp>/`
 
 ### Standalone chat (`knight chat`)
 
@@ -178,6 +241,10 @@ The system evolves. Corrections become rules (`ai-patterns.md`), observations be
 | Short-term | `memory/YYYY-MM-DD.md` | End of session |
 | Long-term | `MEMORY.md` | Pattern repeats 3+ times or user confirms |
 | Patterns | `memory/ai-patterns.md` | After reflection analysis + confirmation |
+
+### Safe Upgrades
+
+User data and program code are physically separated from day one. Upgrading the program never touches the data. When the data format needs to change, migrations run with a full backup, in order, with version tracking — so partial failures are always recoverable.
 
 ---
 
