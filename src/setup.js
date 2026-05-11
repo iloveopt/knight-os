@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const { execSync, spawnSync } = require('child_process');
+const { runMigrations, writeDataVersion, CURRENT_DATA_VERSION } = require('./migrate');
 
 const DEFAULT_WORKSPACE = path.join(os.homedir(), '.openclaw', 'workspace');
 
@@ -446,6 +447,9 @@ async function setup() {
       console.log(`   Manual: run \`python3 ${path.join(workspace, 'scripts', 'heartbeat.py')}\` periodically`);
     }
   }
+
+  // Record the data version so future upgrades know where to start
+  writeDataVersion(workspace, CURRENT_DATA_VERSION);
 
   console.log(`\n${separator}`);
   console.log('✅ Knight OS setup complete!\n');

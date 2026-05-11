@@ -8,6 +8,13 @@ const readline = require('readline');
 const { loadConfig, resolveWorkspace } = require('../src/config');
 const { chat } = require('../src/chat');
 const { setup } = require('../src/setup');
+const {
+  runMigrations,
+  checkVersion,
+  refreshTemplates,
+  backupWorkspace,
+  CURRENT_DATA_VERSION,
+} = require('../src/migrate');
 
 const VERSION = '0.1.0';
 const DEFAULT_WORKSPACE = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
@@ -213,6 +220,52 @@ function commandVersion() {
   console.log(`knight-os v${VERSION}`);
 }
 
+async function commandUpgrade() {
+  const workspace = DEFAULT_WORKSPACE;
+
+  console.log(`\n🔄 Knight OS — Upgrade Check`);
+  console.log(`   Workspace: ${workspace}\n`);
+
+  if (!fs.existsSync(workspace)) {
+    console.log('   ❌ Workspace not found. Run "knight setup" first.\n');
+    process.exit(1);
+  }
+
+  // 1. Run data migrations
+  const { migrated, backupPath, error } = runMigrations(workspace);
+  if (error) {
+    console.error(`\n❌ Upgrade failed: ${error.message}\n`);
+    process.exit(1);
+  }
+
+  if (!migrated) {
+    const { currentVersion } = checkVersion(workspace);
+    console.log(`   ✅ Already up to date (data v${currentVersion}).\n`);
+  }
+
+  // 2. Refresh non-protected template files (add new ones, skip existing)
+  console.log('   Checking for new template files…');
+  const { added, skipped } = refreshTemplates(workspace, TEMPLATES_DIR);
+  if (added.length > 0) {
+    console.log(`   ✅ Added ${added.length} new file(s):`);
+    added.forEach((f) => console.log(`      + ${f}`));
+  } else {
+    console.log('   ✅ No new template files.');
+  }
+
+  const protectedSkipped = skipped.filter((s) => s.includes('(protected)'));
+  if (protectedSkipped.length > 0) {
+    console.log(`\n   🔒 Protected files untouched (your personal data is safe):`);
+    protectedSkipped.forEach((f) => console.log(`      ${f}`));
+  }
+
+  if (backupPath) {
+    console.log(`\n   📦 Backup kept at:\n      ${backupPath}`);
+  }
+
+  console.log(`\n✅ Upgrade complete. Workspace is at data v${CURRENT_DATA_VERSION}.\n`);
+}
+
 async function commandChat() {
   const config = loadConfig();
   const workspace = resolveWorkspace(config);
@@ -234,6 +287,9 @@ switch (command) {
   case 'status':
     commandStatus();
     break;
+  case 'upgrade':
+    commandUpgrade();
+    break;
   case 'version':
   case '--version':
   case '-v':
@@ -247,6 +303,7 @@ switch (command) {
     console.log('  init      Initialize a new workspace (standalone, no OpenClaw required)');
     console.log('  chat      Start interactive AI chat session');
     console.log('  status    Check workspace file status');
+    console.log('  upgrade   Migrate workspace data + refresh template files safely');
     console.log('  version   Show version number');
     console.log('');
     break;
