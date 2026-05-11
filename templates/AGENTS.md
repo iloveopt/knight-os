@@ -35,7 +35,30 @@ On session start, read files in this order:
 6. `memory/ai-patterns.md` (load own behavior rules)
 7. `USER.md` (load user profile)
 8. `TOOLS.md` (load available tools)
-9. `PROJECTS.md` (load project index — on-demand per project)
+9. `memory/YYYY-MM-DD.md` for today + yesterday (load recent context; skip if file doesn't exist)
+10. `PROJECTS.md` (load project index — on-demand per project)
+
+> **Why daily logs?** Without reading recent logs, the AI starts each session with no memory of what happened yesterday. Always load today + yesterday at boot.
+
+## On-Demand Loading Trigger Table
+
+Do NOT load everything at boot. Load these files only when the matching situation arises:
+
+| Trigger | Load |
+|---------|------|
+| Replying to a message / adjusting tone | `memory/ai-patterns.md` chat section |
+| Before executing a task | `memory/ai-patterns.md` exec section |
+| User mentions a project by name | `memory/projects/<name>/main.md` |
+| Executing a task tied to a project | `memory/projects/<name>/main.md` + latest log |
+| Heartbeat / daily review | `PROJECTS.md` index only (no main.md) |
+| Writing daily report | Update main.md → Current Sprint with today's progress |
+| Writing to memory / log / daily report | Check `memory/ai-patterns.md` memory section |
+| Received group message / someone @-mentioned | group handling rules |
+| Involves code / development / PR | `memory/ai-patterns.md` code section |
+| Using scripts / external tools | `memory/ai-patterns.md` tool section |
+| Writing copy / articles / presentations | `memory/user-patterns.md` writing style section |}
+
+> **Principle:** Static identity + rules → system prompt (always present). Long-term memory → load at session start. Project details + situational rules → lazy-load on demand. Per-turn context → conversation history only.
 
 ## Memory Structure Quick Reference
 
