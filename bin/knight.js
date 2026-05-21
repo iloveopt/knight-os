@@ -8,6 +8,7 @@ const readline = require('readline');
 const { loadConfig, resolveWorkspace } = require('../src/config');
 const { chat } = require('../src/chat');
 const { setup } = require('../src/setup');
+const { dashboard } = require('../src/dashboard');
 const {
   runMigrations,
   checkVersion,
@@ -272,6 +273,16 @@ async function commandChat() {
   await chat(config, workspace);
 }
 
+function commandDashboard() {
+  const config = loadConfig();
+  const workspace = resolveWorkspace(config);
+  const args = process.argv.slice(3);
+  const outputIdx = args.indexOf('--output');
+  const outputPath = outputIdx !== -1 ? args[outputIdx + 1] : undefined;
+  const noOpen = args.includes('--no-open');
+  dashboard(config, workspace, { output: outputPath, open: !noOpen });
+}
+
 const command = process.argv[2];
 
 switch (command) {
@@ -290,6 +301,9 @@ switch (command) {
   case 'upgrade':
     commandUpgrade();
     break;
+  case 'dashboard':
+    commandDashboard();
+    break;
   case 'version':
   case '--version':
   case '-v':
@@ -304,6 +318,7 @@ switch (command) {
     console.log('  chat      Start interactive AI chat session');
     console.log('  status    Check workspace file status');
     console.log('  upgrade   Migrate workspace data + refresh template files safely');
+    console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  version   Show version number');
     console.log('');
     break;
