@@ -318,7 +318,7 @@ switch (command) {
     console.log('  chat      Start interactive AI chat session');
     console.log('  status    Check workspace file status');
     console.log('  upgrade   Migrate workspace data + refresh template files safely');
-  console.log('  dashboard Generate a local HTML dashboard from your workspace data');
+    console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  version   Show version number');
     console.log('');
     break;

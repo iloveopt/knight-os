@@ -77,8 +77,11 @@ function collectData(workspace, config) {
   }
   const patternsText = readFile(patternsPath);
   const totalRuleLines = countLines(patternsText);
-  // count numbered rules like "1. " or "## " headings that look like rule blocks
-  const coreRules = countMatches(patternsText, /^\d+\.\s+\*\*/gm);
+  // Count numbered rules flexibly: matches lines like "1. **rule**", "- rule", or plain "## RULE" headings
+  // Tries specific format first, falls back to counting any non-empty list/heading lines
+  let coreRules = countMatches(patternsText, /^\d+\.\s+/gm);
+  if (coreRules === 0) coreRules = countMatches(patternsText, /^[-*]\s+\S/gm);
+  if (coreRules === 0) coreRules = countMatches(patternsText, /^#{1,3}\s+\S/gm);
   const badPatterns = countMatches(patternsText, /^\|\s*\d+\s*\|/gm);
 
   // Projects from PROJECTS.md
@@ -129,13 +132,13 @@ function collectData(workspace, config) {
     knightVersion = 'v' + pkg.version;
   } catch { /* ok */ }
 
-  // Days since workspace creation: first daily log date
-  const oldestLog = allMemFiles.length ? allMemFiles[allMemFiles.length - 1].substring(0, 10) : null;
-  let activeDays = 0;
-  if (oldestLog) {
-    const ms = Date.now() - new Date(oldestLog).getTime();
-    activeDays = Math.max(1, Math.round(ms / 86400000));
-  }
+  // Count unique days that have a daily log entry (true active days, not days since first log)
+  const activeDays = allMemFiles.length;
+
+  // Heartbeat interval from config (default 6h)
+  const heartbeatInterval = (config.heartbeat && config.heartbeat.interval_hours)
+    ? `${config.heartbeat.interval_hours}h`
+    : '6h';
 
   const generatedAt = new Date().toISOString().substring(0, 10);
 
@@ -144,7 +147,7 @@ function collectData(workspace, config) {
     totalRuleLines, coreRules, badPatterns,
     projectRows, activeProjects,
     recentLogs, reflCount, logFiles: logFiles.length,
-    knightVersion, activeDays, generatedAt,
+    knightVersion, activeDays, generatedAt, heartbeatInterval,
   };
 }
 
@@ -183,7 +186,8 @@ function buildHTML(d) {
     </li>`;
   }).join('');
 
-  const levelPct = Math.min(100, Math.round((d.coreRules / 20) * 100));
+  // Level bar: scale relative to rules count (every 5 rules = 25%; cap at 100%)
+  const levelPct = d.coreRules === 0 ? 0 : Math.min(100, Math.round((d.coreRules / Math.max(d.coreRules, 20)) * 100));
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -370,7 +374,7 @@ function buildHTML(d) {
       </div>
       <div class="stat-box">
         <div class="stat-num" style="color:var(--accent3)">${d.activeDays || '—'}</div>
-        <div class="stat-label">活跃天数</div>
+        <div class="stat-label">有记录的天数</div>
       </div>
     </div>
   </div>
@@ -432,7 +436,7 @@ function buildHTML(d) {
         </div>
         <div class="stat-mini">
           <div class="stat-mini-num" style="color:var(--text2)">${d.activeDays}</div>
-          <div class="stat-mini-label">活跃天数</div>
+          <div class="stat-mini-label">有记录的天数</div>
         </div>
       </div>
       <div style="margin-top:14px;font-size:11px;color:var(--text3);line-height:1.8">
@@ -472,7 +476,7 @@ function buildHTML(d) {
         <div>⚡ 下次会话 AI 更聪明</div>
       </div>
       <div style="font-size:11px;color:var(--text3)">
-        Heartbeat 每 ${d.knightVersion !== 'latest' ? '6h' : 'N'}h 自动扫描
+        Heartbeat 每 ${d.heartbeatInterval} 自动扫描
       </div>
     </div>
 
