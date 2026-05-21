@@ -9,6 +9,7 @@ const { loadConfig, resolveWorkspace } = require('../src/config');
 const { chat } = require('../src/chat');
 const { setup } = require('../src/setup');
 const { dashboard } = require('../src/dashboard');
+const { rollback } = require('../src/rollback');
 const {
   runMigrations,
   checkVersion,
@@ -304,6 +305,13 @@ switch (command) {
   case 'dashboard':
     commandDashboard();
     break;
+  case 'rollback':
+    (async () => {
+      const config = loadConfig();
+      const workspace = resolveWorkspace(config);
+      await rollback(config, workspace);
+    })();
+    break;
   case 'version':
   case '--version':
   case '-v':
@@ -319,6 +327,7 @@ switch (command) {
     console.log('  status    Check workspace file status');
     console.log('  upgrade   Migrate workspace data + refresh template files safely');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
+    console.log('  rollback  Restore workspace from a previous backup');
     console.log('  version   Show version number');
     console.log('');
     break;
