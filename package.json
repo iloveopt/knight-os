@@ -1,13 +1,13 @@
 {
   "name": "knight-os",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "AI companion OS for OpenClaw — memory, reflection, and identity framework",
   "main": "bin/knight.js",
   "bin": {
     "knight": "./bin/knight.js"
   },
   "scripts": {
-    "test": "node bin/knight.js version"
+    "test": "node scripts/smoke-test.js"
   },
   "keywords": [
     "openclaw",

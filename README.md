@@ -66,16 +66,33 @@ Ignores:  ~/.openclaw/workspace/                   (your data — always safe)
 To apply any new templates or run data migrations:
 
 ```bash
+knight upgrade --plan
 knight upgrade
 ```
 
 This will:
 
-1. Check if your workspace data format needs updating
-2. Create a full timestamped backup before making any changes
-3. Run any pending migrations (adds new files, never deletes yours)
-4. Add new template files introduced in the new version
-5. Leave protected files untouched: `SOUL.md`, `MEMORY.md`, `USER.md`, `REDLINES.md`
+1. Preview the upgrade with `knight upgrade --plan` without writing files
+2. Check if your workspace data format needs updating
+3. Create a full timestamped backup before making any changes
+4. Run any pending migrations (adds new files, never deletes yours)
+5. Add new template files introduced in the new version
+6. Leave protected files untouched: `SOUL.md`, `MEMORY.md`, `USER.md`, `REDLINES.md`
+
+### Safe Upgrade Loop
+
+```bash
+knight doctor
+knight upgrade --plan
+knight upgrade
+knight rollback --list
+```
+
+If you want to inspect a restore before applying it:
+
+```bash
+knight rollback --dry-run
+```
 
 Example output:
 
@@ -174,9 +191,18 @@ Over time, `ai-patterns.md` accumulates rules your AI uses automatically in ever
 ```bash
 knight setup      # Configure Knight OS (requires OpenClaw installed)
 knight init       # Initialize workspace standalone (no OpenClaw check)
-knight upgrade    # Safely migrate data + refresh templates after npm upgrade
 knight chat       # Interactive AI chat (Anthropic API directly)
 knight status     # Check workspace file status
+knight doctor     # Full workspace health report with next actions
+knight upgrade    # Safely migrate data + refresh templates after npm upgrade
+knight upgrade --plan
+                  # Preview migrations/templates without writing files
+knight rollback   # Restore workspace from a previous backup
+knight rollback --list
+                  # List available backups without entering restore flow
+knight rollback --dry-run
+                  # Preview latest backup restore without writing files
+knight dashboard  # Generate a local HTML dashboard
 knight version    # Show version
 ```
 
@@ -186,9 +212,32 @@ Run this after every `npm upgrade knight-os` to apply new templates and data mig
 
 Safe by design:
 - Always backs up first, never migrates without a backup
+- `knight upgrade --plan` previews current data version, target data version, pending migrations, new templates, protected files, and existing templates that will not be overwritten
 - Protected files (`SOUL.md`, `MEMORY.md`, `USER.md`, `REDLINES.md`) are never overwritten
 - Migrations only add or transform — they never delete your content
 - If something goes wrong, your backup is at `.knight-backups/<timestamp>/`
+
+### `knight doctor`
+
+Run this anytime to check workspace health:
+
+```bash
+knight doctor
+```
+
+The report checks core files, memory directories, `.knight-version`, backups, reflections, log size, MEMORY.md freshness, and heartbeat configuration. It also prints executable next actions such as `knight setup`, `knight upgrade --plan`, or `knight rollback --list`.
+
+### `knight rollback`
+
+Use rollback commands to inspect and restore backups:
+
+```bash
+knight rollback --list
+knight rollback --dry-run
+knight rollback
+```
+
+Rollback keeps protected files untouched: `SOUL.md`, `MEMORY.md`, `USER.md`, `REDLINES.md`.
 
 ### Standalone chat (`knight chat`)
 

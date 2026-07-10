@@ -108,6 +108,7 @@ const MIGRATIONS = [
     run(workspace) {
       // Ensure memory subdirectories exist (previously optional)
       const memoryDirs = [
+        'memory/reflections',
         'memory/logs',
         'memory/projects',
         'memory/templates',
@@ -177,6 +178,15 @@ function checkVersion(workspace) {
 }
 
 /**
+ * Return migration steps that would run from currentVersion to targetVersion.
+ */
+function getPendingMigrations(currentVersion, targetVersion) {
+  return MIGRATIONS.filter(
+    (m) => m.from >= currentVersion && m.to <= targetVersion
+  ).sort((a, b) => a.from - b.from);
+}
+
+/**
  * Run all pending migrations for the workspace.
  *
  * - Skips silently if already up to date.
@@ -197,9 +207,7 @@ function runMigrations(workspace) {
     return { migrated: false, backupPath: null, error: null };
   }
 
-  const pending = MIGRATIONS.filter(
-    (m) => m.from >= currentVersion && m.to <= targetVersion
-  ).sort((a, b) => a.from - b.from);
+  const pending = getPendingMigrations(currentVersion, targetVersion);
 
   if (pending.length === 0) {
     // No migration steps defined yet — just bump the version
@@ -258,36 +266,94 @@ function runMigrations(workspace) {
  */
 function refreshTemplates(workspace, templatesDir, opts) {
   opts = opts || {};
+  const plan = planTemplateRefresh(workspace, templatesDir);
   const added = [];
-  const skipped = [];
+
+  const filesToWrite = opts.force
+    ? plan.newFiles.concat(plan.existingFiles)
+    : plan.newFiles;
+
+  for (const relPath of filesToWrite) {
+    const dest = path.join(workspace, relPath);
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    fs.copyFileSync(path.join(templatesDir, relPath), dest);
+    added.push(relPath);
+  }
+
+  const skipped = plan.protectedFiles
+    .map((f) => f + ' (protected)')
+    .concat(opts.force ? [] : plan.existingFiles);
+
+  return { added, skipped };
+}
+
+/**
+ * Classify template files without writing anything.
+ *
+ * Returns {
+ *   newFiles: string[],
+ *   existingFiles: string[],
+ *   protectedFiles: string[]
+ * }
+ */
+function planTemplateRefresh(workspace, templatesDir) {
+  const newFiles = [];
+  const existingFiles = [];
+  const protectedFiles = [];
 
   function walk(dir, base) {
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
-      const relPath = path.relative(base, path.join(dir, entry.name));
+      const sourcePath = path.join(dir, entry.name);
+      const relPath = path.relative(base, sourcePath);
       if (entry.isDirectory()) {
-        walk(path.join(dir, entry.name), base);
+        walk(sourcePath, base);
         continue;
       }
+
       const isRoot = !relPath.includes(path.sep);
       const isProtected = isRoot && PROTECTED_FILES.includes(entry.name);
       if (isProtected) {
-        skipped.push(relPath + ' (protected)');
+        protectedFiles.push(relPath);
         continue;
       }
-      const dest = path.join(workspace, relPath);
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      if (!fs.existsSync(dest) || opts.force) {
-        fs.copyFileSync(path.join(dir, entry.name), dest);
-        added.push(relPath);
+
+      if (fs.existsSync(path.join(workspace, relPath))) {
+        existingFiles.push(relPath);
       } else {
-        skipped.push(relPath);
+        newFiles.push(relPath);
       }
     }
   }
 
   walk(templatesDir, templatesDir);
-  return { added, skipped };
+  return {
+    newFiles,
+    existingFiles,
+    protectedFiles,
+  };
+}
+
+/**
+ * Build a no-write upgrade plan for the workspace.
+ */
+function createUpgradePlan(workspace, templatesDir) {
+  const version = checkVersion(workspace);
+  const pendingMigrations = getPendingMigrations(
+    version.currentVersion,
+    version.targetVersion
+  );
+  const templates = planTemplateRefresh(workspace, templatesDir);
+
+  return {
+    currentVersion: version.currentVersion,
+    targetVersion: version.targetVersion,
+    needsMigration: version.needsMigration,
+    pendingMigrations,
+    newTemplateFiles: templates.newFiles,
+    existingTemplateFiles: templates.existingFiles,
+    protectedTemplateFiles: templates.protectedFiles,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -301,6 +367,9 @@ module.exports = {
   writeDataVersion,
   backupWorkspace,
   checkVersion,
+  createUpgradePlan,
+  getPendingMigrations,
+  planTemplateRefresh,
   runMigrations,
   refreshTemplates,
 };

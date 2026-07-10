@@ -75,26 +75,103 @@ function listBackups(workspace) {
     .sort((a, b) => b.label.localeCompare(a.label)); // newest first
 }
 
-// ── Main ───────────────────────────────────────────────────────────────────
-
-async function rollback(config, workspace) {
-  console.log('\n🔄 knight rollback\n');
-
-  const backups = listBackups(workspace);
-
+function printBackups(workspace, backups) {
   if (backups.length === 0) {
     console.log('  No backups found in', path.join(workspace, BACKUP_DIR));
     console.log('  Run `knight upgrade` to create a backup automatically.\n');
-    process.exit(0);
+    return;
   }
 
-  // Show list
   console.log('📦 Available backups (newest first):\n');
   backups.forEach((b, i) => {
     const tag = i === 0 ? '  ← latest' : '';
     console.log(`  ${i + 1}. ${b.label}${tag}`);
   });
   console.log('');
+}
+
+function getTopLevelRestorePlan(workspace, backupPath) {
+  const skippedProtected = [];
+  const overwriteEntries = [];
+  const addEntries = [];
+
+  const entries = fs.readdirSync(backupPath, { withFileTypes: true });
+  for (const entry of entries) {
+    if (entry.name === BACKUP_DIR) continue;
+
+    if (PROTECTED_FILES.has(entry.name)) {
+      skippedProtected.push(entry.name);
+      continue;
+    }
+
+    const destPath = path.join(workspace, entry.name);
+    const label = entry.isDirectory() ? `${entry.name}/` : entry.name;
+    if (fs.existsSync(destPath)) {
+      overwriteEntries.push(label);
+    } else {
+      addEntries.push(label);
+    }
+  }
+
+  return { skippedProtected, overwriteEntries, addEntries };
+}
+
+function printDryRun(workspace, backup) {
+  const plan = getTopLevelRestorePlan(workspace, backup.fullPath);
+
+  console.log('Dry run only. No files will be changed.\n');
+  console.log(`  Would restore from: ${backup.label}`);
+  console.log(`  Backup path:        ${backup.fullPath}\n`);
+
+  console.log('  Protected files skipped:');
+  if (plan.skippedProtected.length === 0) {
+    console.log('    (none found in selected backup)');
+  } else {
+    plan.skippedProtected.forEach((entry) => console.log(`    - ${entry}`));
+  }
+
+  console.log('\n  Non-protected top-level entries that would be overwritten:');
+  if (plan.overwriteEntries.length === 0) {
+    console.log('    (none)');
+  } else {
+    plan.overwriteEntries.forEach((entry) => console.log(`    - ${entry}`));
+  }
+
+  console.log('\n  Non-protected top-level entries that would be added:');
+  if (plan.addEntries.length === 0) {
+    console.log('    (none)');
+  } else {
+    plan.addEntries.forEach((entry) => console.log(`    - ${entry}`));
+  }
+
+  console.log('\n  To apply this rollback, run `knight rollback`.\n');
+}
+
+// ── Main ───────────────────────────────────────────────────────────────────
+
+async function rollback(config, workspace, opts) {
+  opts = opts || {};
+  console.log('\n🔄 knight rollback\n');
+
+  const backups = listBackups(workspace);
+
+  if (backups.length === 0) {
+    printBackups(workspace, backups);
+    return;
+  }
+
+  if (opts.list) {
+    printBackups(workspace, backups);
+    return;
+  }
+
+  if (opts.dryRun) {
+    printDryRun(workspace, backups[0]);
+    return;
+  }
+
+  // Show list
+  printBackups(workspace, backups);
 
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 
@@ -145,4 +222,8 @@ async function rollback(config, workspace) {
   console.log(`  and pick the pre-rollback snapshot.\n`);
 }
 
-module.exports = { rollback };
+module.exports = {
+  getTopLevelRestorePlan,
+  listBackups,
+  rollback,
+};

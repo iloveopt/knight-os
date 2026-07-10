@@ -10,15 +10,16 @@ const { chat } = require('../src/chat');
 const { setup } = require('../src/setup');
 const { dashboard } = require('../src/dashboard');
 const { rollback } = require('../src/rollback');
+const { doctor } = require('../src/doctor');
 const {
   runMigrations,
   checkVersion,
   refreshTemplates,
-  backupWorkspace,
+  createUpgradePlan,
   CURRENT_DATA_VERSION,
 } = require('../src/migrate');
 
-const VERSION = '0.1.0';
+const VERSION = require('../package.json').version;
 const DEFAULT_WORKSPACE = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
 
@@ -179,7 +180,8 @@ async function commandInit() {
 }
 
 function commandStatus() {
-  const workspace = DEFAULT_WORKSPACE;
+  const config = loadConfig();
+  const workspace = resolveWorkspace(config);
   const requiredFiles = [
     'AGENTS.md',
     'SOUL.md',
@@ -222,8 +224,57 @@ function commandVersion() {
   console.log(`knight-os v${VERSION}`);
 }
 
+function printList(title, items, emptyText) {
+  console.log(`   ${title}:`);
+  if (items.length === 0) {
+    console.log(`      ${emptyText}`);
+  } else {
+    items.forEach((item) => console.log(`      - ${item}`));
+  }
+}
+
+function printUpgradePlan(workspace, plan) {
+  console.log(`\n🧭 Knight OS — Upgrade Plan`);
+  console.log(`   Workspace: ${workspace}\n`);
+  console.log(`   Current data version: v${plan.currentVersion}`);
+  console.log(`   Target data version:  v${plan.targetVersion}\n`);
+
+  console.log('   Pending migrations:');
+  if (plan.pendingMigrations.length === 0) {
+    if (plan.needsMigration) {
+      console.log('      - no explicit migration steps; version marker will be updated');
+    } else {
+      console.log('      (none)');
+    }
+  } else {
+    plan.pendingMigrations.forEach((migration) => {
+      console.log(`      - ${migration.from}→${migration.to}: ${migration.desc}`);
+    });
+  }
+
+  console.log('');
+  printList('New template files that would be added', plan.newTemplateFiles, '(none)');
+  printList('Protected files that would be skipped', plan.protectedTemplateFiles, '(none)');
+  printList(
+    'Existing template files that would not be overwritten',
+    plan.existingTemplateFiles,
+    '(none)'
+  );
+
+  console.log('\n   No files were changed. To apply this plan, run `knight upgrade`.\n');
+}
+
+function commandDoctor() {
+  const config = loadConfig();
+  const workspace = resolveWorkspace(config);
+  return doctor(config, workspace);
+}
+
 async function commandUpgrade() {
-  const workspace = DEFAULT_WORKSPACE;
+  const config = loadConfig();
+  const workspace = resolveWorkspace(config);
+  const args = process.argv.slice(3);
+  const planOnly = args.includes('--plan');
 
   console.log(`\n🔄 Knight OS — Upgrade Check`);
   console.log(`   Workspace: ${workspace}\n`);
@@ -232,6 +283,14 @@ async function commandUpgrade() {
     console.log('   ❌ Workspace not found. Run "knight setup" first.\n');
     process.exit(1);
   }
+
+  if (planOnly) {
+    const plan = createUpgradePlan(workspace, TEMPLATES_DIR);
+    printUpgradePlan(workspace, plan);
+    return;
+  }
+
+  console.log('   Tip: run `knight upgrade --plan` first to preview changes without writing files.\n');
 
   // 1. Run data migrations
   const { migrated, backupPath, error } = runMigrations(workspace);
@@ -299,6 +358,9 @@ switch (command) {
   case 'status':
     commandStatus();
     break;
+  case 'doctor':
+    process.exitCode = commandDoctor();
+    break;
   case 'upgrade':
     commandUpgrade();
     break;
@@ -309,7 +371,11 @@ switch (command) {
     (async () => {
       const config = loadConfig();
       const workspace = resolveWorkspace(config);
-      await rollback(config, workspace);
+      const args = process.argv.slice(3);
+      await rollback(config, workspace, {
+        list: args.includes('--list'),
+        dryRun: args.includes('--dry-run'),
+      });
     })();
     break;
   case 'version':
@@ -325,9 +391,12 @@ switch (command) {
     console.log('  init      Initialize a new workspace (standalone, no OpenClaw required)');
     console.log('  chat      Start interactive AI chat session');
     console.log('  status    Check workspace file status');
+    console.log('  doctor    Run a workspace health report with next actions');
     console.log('  upgrade   Migrate workspace data + refresh template files safely');
+    console.log('            Use --plan to preview without writing files');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  rollback  Restore workspace from a previous backup');
+    console.log('            Use --list or --dry-run for non-interactive checks');
     console.log('  version   Show version number');
     console.log('');
     break;
