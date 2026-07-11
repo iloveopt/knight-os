@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const readline = require('readline');
-const { execSync, spawnSync } = require('child_process');
+const { spawnSync } = require('child_process');
 const { runMigrations, writeDataVersion, CURRENT_DATA_VERSION } = require('./migrate');
 
 const DEFAULT_WORKSPACE = path.join(os.homedir(), '.openclaw', 'workspace');
@@ -18,31 +18,16 @@ function ask(rl, question, defaultVal) {
   });
 }
 
-function checkOpenClaw() {
-  // Primary: look for openclaw binary in PATH
+function checkOpenClawCli() {
+  // OpenClaw is expected to already exist, but its CLI may not be exposed in PATH.
   try {
     const result = spawnSync('openclaw', ['--version'], { encoding: 'utf8', timeout: 5000 });
     if (result.status === 0 && !result.error) {
-      return { installed: true, version: (result.stdout || '').trim().split('\n')[0] || 'unknown' };
+      return { found: true, version: (result.stdout || '').trim().split('\n')[0] || 'unknown' };
     }
   } catch (_) {}
 
-  // Fallback: check npm global list via JSON output
-  try {
-    const result = spawnSync('npm', ['list', '-g', 'openclaw', '--depth=0', '--json'], {
-      encoding: 'utf8',
-      timeout: 10000,
-    });
-    if (result.stdout) {
-      const parsed = JSON.parse(result.stdout);
-      if (parsed && parsed.dependencies && parsed.dependencies.openclaw) {
-        const ver = parsed.dependencies.openclaw.version || 'unknown';
-        return { installed: true, version: ver };
-      }
-    }
-  } catch (_) {}
-
-  return { installed: false };
+  return { found: false };
 }
 
 function findPython3() {
@@ -193,27 +178,28 @@ async function setup() {
   console.log('memory, reflection, and identity framework.\n');
   console.log(separator);
 
-  // Step 1: Check OpenClaw
-  process.stdout.write('\n[1/6] Checking OpenClaw installation... ');
-  const oc = checkOpenClaw();
-  if (oc.installed) {
-    console.log(`✅ found (${oc.version})`);
-  } else {
-    console.log('❌ not found\n');
-    console.log('Knight OS requires OpenClaw. Please install it first:');
-    console.log('\n  npm install -g openclaw\n');
-    console.log('Then run `knight setup` again.');
-    closeAndExit(1);
-    return;
-  }
-
-  // Step 2: Workspace directory
-  console.log('\n[2/6] Workspace configuration');
+  // Step 1: Workspace directory
+  console.log('\n[1/6] Workspace configuration');
   const workspaceInput = await ask(rl, 'Workspace directory', DEFAULT_WORKSPACE);
   const workspace = path.resolve(workspaceInput.replace(/^~/, os.homedir()));
 
   const workspaceExists = fs.existsSync(workspace);
   const hasCoreFiles = workspaceExists && fs.existsSync(path.join(workspace, 'AGENTS.md'));
+
+  if (workspaceExists) {
+    console.log(`  ✅ Workspace path exists: ${workspace}`);
+  } else {
+    console.log(`  ℹ️  Workspace path will be created: ${workspace}`);
+  }
+
+  // Step 2: Optional OpenClaw CLI info
+  process.stdout.write('\n[2/6] OpenClaw CLI availability (optional)... ');
+  const oc = checkOpenClawCli();
+  if (oc.found) {
+    console.log(`found (${oc.version})`);
+  } else {
+    console.log('not found in PATH; continuing with workspace setup');
+  }
 
   // Files that contain user's personal memory/identity — never overwrite by default
   const PROTECTED_FILES = ['SOUL.md', 'MEMORY.md', 'USER.md', 'REDLINES.md'];
@@ -457,7 +443,11 @@ async function setup() {
   console.log('\nNext steps:');
   console.log('  1. Review and customize your SOUL.md (AI personality)');
   console.log('  2. Fill in USER.md (your profile)');
-  console.log('  3. Start chatting: openclaw chat\n');
+  if (oc.found) {
+    console.log('  3. Start chatting: openclaw chat\n');
+  } else {
+    console.log('  3. Start chatting from your OpenClaw environment\n');
+  }
   console.log('How memory works:');
   console.log('  Task done → write-reflection.py → memory/reflections/');
   console.log('  Heartbeat  → reflection-analyzer.py → candidate rules extracted');

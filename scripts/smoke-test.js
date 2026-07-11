@@ -67,6 +67,13 @@ function main() {
   const version = run(['version']);
   assert.strictEqual(version.trim(), `knight-os v${pkg.version}`);
 
+  const setupSource = fs.readFileSync(path.join(root, 'src', 'setup.js'), 'utf8');
+  assert.doesNotMatch(setupSource, /npm['"],\s*\[\s*['"]list['"]/);
+  assert.doesNotMatch(setupSource, /npm install -g openclaw/);
+  for (const field of ['dependencies', 'peerDependencies', 'optionalDependencies']) {
+    assert.ok(!pkg[field] || !pkg[field].openclaw, `package.json must not depend on openclaw via ${field}`);
+  }
+
   const { tempRoot, workspace } = prepareWorkspace();
   const env = { KNIGHT_WORKSPACE: workspace };
 

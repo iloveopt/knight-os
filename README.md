@@ -6,11 +6,9 @@ Give your OpenClaw AI a name, a personality, and the ability to learn from exper
 
 ## Prerequisites
 
-Install [OpenClaw](https://github.com/openclaw/openclaw) first:
+Use Knight OS after [OpenClaw](https://github.com/openclaw/openclaw) is already installed, or from inside an existing OpenClaw agent environment.
 
-```bash
-npm install -g openclaw
-```
+Knight OS does not install OpenClaw and does not require the OpenClaw npm package or global `openclaw` binary to be available during setup.
 
 ## Install
 
@@ -26,7 +24,7 @@ knight setup
 
 The setup wizard will:
 
-1. Verify OpenClaw is installed
+1. Configure and verify your OpenClaw workspace path
 2. Ask for your AI's name, your name, and timezone
 3. Write all framework files into your OpenClaw workspace
 4. Optionally configure Telegram notifications
@@ -37,6 +35,17 @@ After setup, start chatting via OpenClaw:
 ```bash
 openclaw chat
 ```
+
+### Agent/git install
+
+If you are already running inside an OpenClaw agent environment and prefer not to install Knight OS globally, clone this repo and run setup directly:
+
+```bash
+git clone https://github.com/iloveopt/knight-os.git ~/.local/share/knight-os
+node ~/.local/share/knight-os/bin/knight.js setup
+```
+
+This does not install OpenClaw.
 
 ### Custom workspace path
 
@@ -189,8 +198,8 @@ Over time, `ai-patterns.md` accumulates rules your AI uses automatically in ever
 ## Commands
 
 ```bash
-knight setup      # Configure Knight OS (requires OpenClaw installed)
-knight init       # Initialize workspace standalone (no OpenClaw check)
+knight setup      # Configure Knight OS for an OpenClaw workspace
+knight init       # Initialize a new workspace
 knight chat       # Interactive AI chat (Anthropic API directly)
 knight status     # Check workspace file status
 knight doctor     # Full workspace health report with next actions

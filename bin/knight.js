@@ -387,8 +387,8 @@ switch (command) {
     console.log(`knight-os v${VERSION}`);
     console.log('\nUsage: knight <command>\n');
     console.log('Commands:');
-    console.log('  setup     Configure Knight OS for an existing OpenClaw installation');
-    console.log('  init      Initialize a new workspace (standalone, no OpenClaw required)');
+    console.log('  setup     Configure Knight OS for an OpenClaw workspace');
+    console.log('  init      Initialize a new workspace');
     console.log('  chat      Start interactive AI chat session');
     console.log('  status    Check workspace file status');
     console.log('  doctor    Run a workspace health report with next actions');
