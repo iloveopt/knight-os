@@ -13,6 +13,7 @@ const { rollback } = require('../src/rollback');
 const { doctor } = require('../src/doctor');
 const {
   runMigrations,
+  backupWorkspace,
   checkVersion,
   refreshTemplates,
   createUpgradePlan,
@@ -306,7 +307,25 @@ async function commandUpgrade() {
 
   // 2. Refresh non-protected template files (add new ones, skip existing)
   console.log('   Checking for new template files…');
-  const { added, skipped } = refreshTemplates(workspace, TEMPLATES_DIR);
+  const templatePlan = createUpgradePlan(workspace, TEMPLATES_DIR);
+  let finalBackupPath = backupPath;
+  if (!finalBackupPath && templatePlan.newTemplateFiles.length > 0) {
+    try {
+      finalBackupPath = backupWorkspace(workspace);
+    } catch (err) {
+      console.error(`\n❌ Upgrade failed: Backup failed, aborting template refresh: ${err.message}\n`);
+      process.exit(1);
+    }
+  }
+  const { added, skipped } = refreshTemplates(workspace, TEMPLATES_DIR, {
+    vars: {
+      aiName: config.ai_name,
+      userName: config.user_name,
+      timezone: config.timezone,
+      language: config.language || 'en',
+      channel: 'direct',
+    },
+  });
   if (added.length > 0) {
     console.log(`   ✅ Added ${added.length} new file(s):`);
     added.forEach((f) => console.log(`      + ${f}`));
@@ -320,8 +339,14 @@ async function commandUpgrade() {
     protectedSkipped.forEach((f) => console.log(`      ${f}`));
   }
 
-  if (backupPath) {
-    console.log(`\n   📦 Backup kept at:\n      ${backupPath}`);
+  const existingSkipped = skipped.filter((s) => !s.includes('(protected)'));
+  if (existingSkipped.length > 0) {
+    console.log(`\n   ⏭️  Existing template files skipped:`);
+    existingSkipped.forEach((f) => console.log(`      ${f}`));
+  }
+
+  if (finalBackupPath) {
+    console.log(`\n   📦 Backup kept at:\n      ${finalBackupPath}`);
   }
 
   console.log(`\n✅ Upgrade complete. Workspace is at data v${CURRENT_DATA_VERSION}.\n`);
@@ -388,11 +413,12 @@ switch (command) {
     console.log('\nUsage: knight <command>\n');
     console.log('Commands:');
     console.log('  setup     Configure Knight OS for an OpenClaw workspace');
+    console.log('            Existing memory files are backed up and preserved');
     console.log('  init      Initialize a new workspace');
     console.log('  chat      Start interactive AI chat session');
     console.log('  status    Check workspace file status');
     console.log('  doctor    Run a workspace health report with next actions');
-    console.log('  upgrade   Migrate workspace data + refresh template files safely');
+    console.log('  upgrade   Migrate workspace data + add missing templates safely');
     console.log('            Use --plan to preview without writing files');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  rollback  Restore workspace from a previous backup');

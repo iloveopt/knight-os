@@ -36,6 +36,20 @@ After setup, start chatting via OpenClaw:
 openclaw chat
 ```
 
+### Existing OpenClaw workspace or memory
+
+If your workspace already has memory files, Knight OS treats them as user-owned assets. Files such as `MEMORY.md`, `SOUL.md`, `USER.md`, `REDLINES.md`, `AGENTS.md`, `PROJECTS.md`, `TOOLS.md`, `HEARTBEAT.md`, and `memory/*.md` are preserved.
+
+For an existing workspace:
+
+```bash
+knight doctor
+knight upgrade --plan
+knight upgrade
+```
+
+`knight setup` also detects existing memory markers and switches to a safe path: it creates a backup first, adds only missing files, renders template placeholders, and skips anything already present.
+
 ### Agent/git install
 
 If you are already running inside an OpenClaw agent environment and prefer not to install Knight OS globally, clone this repo and run setup directly:
@@ -85,8 +99,8 @@ This will:
 2. Check if your workspace data format needs updating
 3. Create a full timestamped backup before making any changes
 4. Run any pending migrations (adds new files, never deletes yours)
-5. Add new template files introduced in the new version
-6. Leave protected files untouched: `SOUL.md`, `MEMORY.md`, `USER.md`, `REDLINES.md`
+5. Add new template files introduced in the new version, with placeholders rendered
+6. Leave existing files untouched, including `AGENTS.md`, `PROJECTS.md`, `TOOLS.md`, `HEARTBEAT.md`, `SOUL.md`, `MEMORY.md`, `USER.md`, `REDLINES.md`, and existing `memory/*.md`
 
 ### Safe Upgrade Loop
 

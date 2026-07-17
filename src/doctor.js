@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const {
   CURRENT_DATA_VERSION,
+  hasExistingMemory,
   readDataVersion,
 } = require('./migrate');
 
@@ -106,22 +107,39 @@ function buildDoctorReport(config, workspace) {
   }
 
   addResult(results, 'ok', 'Workspace', workspace);
+  const existingMemory = hasExistingMemory(workspace);
+  if (existingMemory) {
+    addResult(
+      results,
+      'info',
+      'Existing memory compatibility',
+      'existing memory/OpenClaw files detected',
+      'preview changes with `knight upgrade --plan` before writing'
+    );
+  }
 
   const missingCore = [];
   for (const file of CORE_FILES) {
     const exists = fs.existsSync(path.join(workspace, file));
+    const action = existingMemory
+      ? 'preview safe additions with `knight upgrade --plan`'
+      : 'run `knight setup` or `knight upgrade --plan`';
     addResult(
       results,
       exists ? 'ok' : 'fail',
       file,
       exists ? 'present' : 'missing',
-      exists ? null : 'run `knight setup` or `knight upgrade --plan`'
+      exists ? null : action
     );
     if (!exists) missingCore.push(file);
   }
   if (missingCore.length > 0) {
     severeFailures++;
-    nextActions.push('run `knight setup` or restore missing core files before continuing');
+    nextActions.push(
+      existingMemory
+        ? 'run `knight upgrade --plan` to preview safe additions; do not rerun setup unless you intend to initialize a blank workspace'
+        : 'run `knight setup` or restore missing core files before continuing'
+    );
   }
 
   const missingDirs = [];

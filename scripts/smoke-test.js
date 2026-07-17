@@ -6,15 +6,17 @@ const os = require('os');
 const path = require('path');
 const { execFileSync } = require('child_process');
 const pkg = require('../package.json');
-const { CURRENT_DATA_VERSION } = require('../src/migrate');
+const { backupWorkspace, CURRENT_DATA_VERSION } = require('../src/migrate');
+const { writeSetupTemplates } = require('../src/setup');
 
 const root = path.join(__dirname, '..');
 const bin = path.join(root, 'bin', 'knight.js');
 
-function run(args, env) {
+function run(args, env, input) {
   return execFileSync(process.execPath, [bin].concat(args), {
     cwd: root,
     env: Object.assign({}, process.env, env),
+    input: input || '',
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -63,6 +65,12 @@ function prepareWorkspace() {
   return { tempRoot, workspace };
 }
 
+function countBackups(workspace) {
+  const backupRoot = path.join(workspace, '.knight-backups');
+  if (!fs.existsSync(backupRoot)) return 0;
+  return fs.readdirSync(backupRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
+}
+
 function main() {
   const version = run(['version']);
   assert.strictEqual(version.trim(), `knight-os v${pkg.version}`);
@@ -107,6 +115,52 @@ function main() {
   assert.match(dryRun, /AGENTS\.md/);
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
+
+  const tempExistingMemory = fs.mkdtempSync(path.join(os.tmpdir(), 'knight-existing-memory-'));
+  const memoryOnlyWorkspace = path.join(tempExistingMemory, 'workspace');
+  fs.mkdirSync(memoryOnlyWorkspace, { recursive: true });
+  fs.writeFileSync(path.join(memoryOnlyWorkspace, 'MEMORY.md'), 'user memory must stay\n');
+  backupWorkspace(memoryOnlyWorkspace);
+  writeSetupTemplates(memoryOnlyWorkspace, {
+    aiName: 'Knight',
+    userName: 'Smoke User',
+    timezone: 'UTC',
+    language: 'en',
+  }, { safeExistingPath: true });
+  assert.strictEqual(
+    fs.readFileSync(path.join(memoryOnlyWorkspace, 'MEMORY.md'), 'utf8'),
+    'user memory must stay\n',
+    'setup overwrote existing MEMORY.md'
+  );
+  assert.ok(fs.existsSync(path.join(memoryOnlyWorkspace, 'AGENTS.md')), 'setup did not add missing AGENTS.md');
+  assert.ok(countBackups(memoryOnlyWorkspace) > 0, 'setup did not back up existing memory workspace');
+  fs.rmSync(tempExistingMemory, { recursive: true, force: true });
+
+  const tempExistingFiles = fs.mkdtempSync(path.join(os.tmpdir(), 'knight-existing-files-'));
+  const existingFilesWorkspace = path.join(tempExistingFiles, 'workspace');
+  fs.mkdirSync(path.join(existingFilesWorkspace, 'memory'), { recursive: true });
+  fs.writeFileSync(path.join(existingFilesWorkspace, 'AGENTS.md'), 'custom agents\n');
+  fs.writeFileSync(path.join(existingFilesWorkspace, 'memory', 'ai-patterns.md'), 'custom ai patterns\n');
+  backupWorkspace(existingFilesWorkspace);
+  writeSetupTemplates(existingFilesWorkspace, {
+    aiName: 'Knight',
+    userName: 'Smoke User',
+    timezone: 'UTC',
+    language: 'en',
+  }, { safeExistingPath: true });
+  assert.strictEqual(
+    fs.readFileSync(path.join(existingFilesWorkspace, 'AGENTS.md'), 'utf8'),
+    'custom agents\n',
+    'setup overwrote existing AGENTS.md'
+  );
+  assert.strictEqual(
+    fs.readFileSync(path.join(existingFilesWorkspace, 'memory', 'ai-patterns.md'), 'utf8'),
+    'custom ai patterns\n',
+    'setup overwrote existing memory/ai-patterns.md'
+  );
+  assert.ok(countBackups(existingFilesWorkspace) > 0, 'setup did not back up existing file workspace');
+  fs.rmSync(tempExistingFiles, { recursive: true, force: true });
+
   console.log('smoke tests passed');
 }
 
