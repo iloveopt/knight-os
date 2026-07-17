@@ -44,11 +44,20 @@ For an existing workspace:
 
 ```bash
 knight doctor
-knight upgrade --plan
-knight upgrade
+knight adopt --plan
+knight adopt
 ```
 
-`knight setup` also detects existing memory markers and switches to a safe path: it creates a backup first, adds only missing files, renders template placeholders, and skips anything already present.
+`knight adopt --plan` scans your workspace and classifies each action:
+
+- `preserve`: existing user files that Knight OS will not touch
+- `add`: missing files, directories, or scripts that are safe to create
+- `sidecar`: Knight template files written next to existing user files, such as `AGENTS.knight.md` or `memory/knight-ai-patterns.md`
+- `manual`: files that need human review, such as an existing `knight.config.json`
+
+`knight adopt` creates a full backup first, then only adds missing files or sidecar files. It also writes `.knight/manifest.json` and `.knight/adoption-report.md` so you can inspect what Knight OS created.
+
+`knight setup` also detects existing memory markers and switches to a safe path: it creates a backup first, adds only missing files, renders template placeholders, and skips anything already present. For an existing memory workspace, prefer `knight adopt --plan` first.
 
 ### Agent/git install
 
@@ -220,6 +229,9 @@ knight doctor     # Full workspace health report with next actions
 knight upgrade    # Safely migrate data + refresh templates after npm upgrade
 knight upgrade --plan
                   # Preview migrations/templates without writing files
+knight adopt      # Adopt an existing OpenClaw workspace without overwriting memory
+knight adopt --plan
+                  # Preview preserve/add/sidecar/manual actions without writing files
 knight rollback   # Restore workspace from a previous backup
 knight rollback --list
                   # List available backups without entering restore flow
