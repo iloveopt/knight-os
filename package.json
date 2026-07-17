@@ -1,6 +1,6 @@
 {
   "name": "knight-os",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "AI companion OS for OpenClaw — memory, reflection, and identity framework",
   "main": "bin/knight.js",
   "bin": {

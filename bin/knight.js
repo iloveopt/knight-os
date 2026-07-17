@@ -17,6 +17,12 @@ const {
   printAdoptionPlan,
 } = require('../src/adopt');
 const {
+  applySyncPlan,
+  createSyncPlan,
+  printAdapters,
+  printSyncPlan,
+} = require('../src/adapters');
+const {
   runMigrations,
   backupWorkspace,
   checkVersion,
@@ -404,6 +410,74 @@ function commandAdopt() {
   console.log(`Report:\n  ${result.reportPath}\n`);
 }
 
+function commandAdapters() {
+  const subcommand = process.argv[3];
+  if (subcommand === 'list' || !subcommand) {
+    printAdapters();
+    return;
+  }
+  console.error(`Unknown adapters command: ${subcommand}`);
+  console.error('Usage: knight adapters list');
+  process.exit(1);
+}
+
+function commandSync() {
+  const config = loadConfig();
+  const workspace = resolveWorkspace(config);
+  const args = process.argv.slice(3);
+  const planOnly = args.includes('--plan') || args.includes('--dry-run');
+  const all = args.includes('--all');
+  const agentIdx = args.indexOf('--agent');
+  const agent = agentIdx !== -1 ? args[agentIdx + 1] : null;
+
+  if (!all && !agent) {
+    console.error('Usage: knight sync --agent <openclaw|claude|codex> [--plan]');
+    console.error('       knight sync --all [--plan]');
+    process.exit(1);
+  }
+
+  const plan = createSyncPlan(workspace, {
+    all,
+    agent,
+    templatesDir: TEMPLATES_DIR,
+    vars: {
+      aiName: config.ai_name,
+      userName: config.user_name,
+      timezone: config.timezone,
+      language: config.language || 'en',
+      channel: 'direct',
+    },
+  });
+
+  if (plan.invalid.length > 0) {
+    printSyncPlan(plan);
+    process.exit(1);
+  }
+
+  if (planOnly) {
+    printSyncPlan(plan);
+    return;
+  }
+
+  console.log('\nKnight OS — Sync Agent Adapter');
+  console.log(`Workspace: ${workspace}`);
+  console.log('Same memory, multiple agents. Knight is not a scheduler.\n');
+
+  const result = applySyncPlan(plan, { packageVersion: VERSION });
+  const coreWrites = result.written.filter((item) => item.path.startsWith('.knight/core/'));
+  const adapterWrites = result.written.filter((item) => !item.path.startsWith('.knight/core/'));
+
+  console.log(`Core files: ${coreWrites.length}`);
+  coreWrites.forEach((item) => console.log(`  ${item.action === 'update' ? '↻' : '+'} ${item.path}`));
+  console.log(`Adapter files: ${adapterWrites.length}`);
+  adapterWrites.forEach((item) => console.log(`  ${item.action === 'update' ? '↻' : '+'} ${item.path} (${item.agent})`));
+  if (result.skipped.length > 0) {
+    console.log('Skipped:');
+    result.skipped.forEach((item) => console.log(`  - ${item.path}: ${item.reason}`));
+  }
+  console.log(`Manifest:\n  ${result.manifestPath}\n`);
+}
+
 async function commandChat() {
   const config = loadConfig();
   const workspace = resolveWorkspace(config);
@@ -444,6 +518,12 @@ switch (command) {
   case 'adopt':
     commandAdopt();
     break;
+  case 'adapters':
+    commandAdapters();
+    break;
+  case 'sync':
+    commandSync();
+    break;
   case 'dashboard':
     commandDashboard();
     break;
@@ -477,6 +557,10 @@ switch (command) {
     console.log('            Use --plan to preview without writing files');
     console.log('  adopt     Adopt an existing OpenClaw workspace without overwriting memory');
     console.log('            Use --plan to preview preserve/add/sidecar/manual actions');
+    console.log('  adapters  List available agent adapters');
+    console.log('            Use `knight adapters list`');
+    console.log('  sync      Generate canonical .knight/core memory and adapter instructions');
+    console.log('            Use --agent openclaw|claude|codex, --all, and --plan');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  rollback  Restore workspace from a previous backup');
     console.log('            Use --list or --dry-run for non-interactive checks');
