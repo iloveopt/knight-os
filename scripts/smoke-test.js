@@ -161,6 +161,45 @@ function main() {
   assert.ok(countBackups(existingFilesWorkspace) > 0, 'setup did not back up existing file workspace');
   fs.rmSync(tempExistingFiles, { recursive: true, force: true });
 
+  const tempAdopt = fs.mkdtempSync(path.join(os.tmpdir(), 'knight-adopt-'));
+  const adoptWorkspace = path.join(tempAdopt, 'workspace');
+  fs.mkdirSync(path.join(adoptWorkspace, 'memory'), { recursive: true });
+  fs.writeFileSync(path.join(adoptWorkspace, 'MEMORY.md'), 'adopt memory\n');
+  fs.writeFileSync(path.join(adoptWorkspace, 'AGENTS.md'), 'adopt agents\n');
+  fs.writeFileSync(path.join(adoptWorkspace, 'memory', 'ai-patterns.md'), 'adopt ai patterns\n');
+  const adoptEnv = { KNIGHT_WORKSPACE: adoptWorkspace };
+  const beforeAdoptPlan = snapshotTree(adoptWorkspace);
+  const adoptPlan = run(['adopt', '--plan'], adoptEnv);
+  const afterAdoptPlan = snapshotTree(adoptWorkspace);
+  assert.strictEqual(afterAdoptPlan, beforeAdoptPlan, 'adopt --plan changed the workspace');
+  assert.match(adoptPlan, /Adoption Plan/);
+  assert.match(adoptPlan, /preserve:/);
+  assert.match(adoptPlan, /sidecar:/);
+
+  run(['adopt'], adoptEnv);
+  assert.strictEqual(
+    fs.readFileSync(path.join(adoptWorkspace, 'AGENTS.md'), 'utf8'),
+    'adopt agents\n',
+    'adopt overwrote existing AGENTS.md'
+  );
+  assert.strictEqual(
+    fs.readFileSync(path.join(adoptWorkspace, 'memory', 'ai-patterns.md'), 'utf8'),
+    'adopt ai patterns\n',
+    'adopt overwrote existing memory/ai-patterns.md'
+  );
+  assert.ok(fs.existsSync(path.join(adoptWorkspace, 'AGENTS.knight.md')), 'adopt did not create AGENTS sidecar');
+  assert.ok(
+    fs.existsSync(path.join(adoptWorkspace, 'memory', 'knight-ai-patterns.md')),
+    'adopt did not create ai-patterns sidecar'
+  );
+  assert.ok(fs.existsSync(path.join(adoptWorkspace, '.knight', 'manifest.json')), 'adopt did not create manifest');
+  assert.ok(
+    fs.existsSync(path.join(adoptWorkspace, '.knight', 'adoption-report.md')),
+    'adopt did not create adoption report'
+  );
+  assert.ok(countBackups(adoptWorkspace) > 0, 'adopt did not back up before writing');
+  fs.rmSync(tempAdopt, { recursive: true, force: true });
+
   console.log('smoke tests passed');
 }
 

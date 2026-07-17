@@ -114,7 +114,7 @@ function buildDoctorReport(config, workspace) {
       'info',
       'Existing memory compatibility',
       'existing memory/OpenClaw files detected',
-      'preview changes with `knight upgrade --plan` before writing'
+      'preview adoption with `knight adopt --plan` before writing'
     );
   }
 
@@ -122,7 +122,7 @@ function buildDoctorReport(config, workspace) {
   for (const file of CORE_FILES) {
     const exists = fs.existsSync(path.join(workspace, file));
     const action = existingMemory
-      ? 'preview safe additions with `knight upgrade --plan`'
+      ? 'preview safe additions with `knight adopt --plan` or `knight upgrade --plan`'
       : 'run `knight setup` or `knight upgrade --plan`';
     addResult(
       results,
@@ -137,7 +137,7 @@ function buildDoctorReport(config, workspace) {
     severeFailures++;
     nextActions.push(
       existingMemory
-        ? 'run `knight upgrade --plan` to preview safe additions; do not rerun setup unless you intend to initialize a blank workspace'
+        ? 'run `knight adopt --plan` to preview safe additions; do not rerun setup unless you intend to initialize a blank workspace'
         : 'run `knight setup` or restore missing core files before continuing'
     );
   }

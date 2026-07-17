@@ -12,6 +12,11 @@ const { dashboard } = require('../src/dashboard');
 const { rollback } = require('../src/rollback');
 const { doctor } = require('../src/doctor');
 const {
+  applyAdoptionPlan,
+  createAdoptionPlan,
+  printAdoptionPlan,
+} = require('../src/adopt');
+const {
   runMigrations,
   backupWorkspace,
   checkVersion,
@@ -23,6 +28,7 @@ const {
 const VERSION = require('../package.json').version;
 const DEFAULT_WORKSPACE = path.join(process.env.HOME || '~', '.openclaw', 'workspace');
 const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
+const SCRIPTS_DIR = path.join(__dirname, '..', 'scripts');
 
 function ask(rl, question) {
   return new Promise((resolve) => {
@@ -352,6 +358,52 @@ async function commandUpgrade() {
   console.log(`\n✅ Upgrade complete. Workspace is at data v${CURRENT_DATA_VERSION}.\n`);
 }
 
+function commandAdopt() {
+  const config = loadConfig();
+  const workspace = resolveWorkspace(config);
+  const args = process.argv.slice(3);
+  const planOnly = args.includes('--plan');
+  const plan = createAdoptionPlan(workspace, {
+    templatesDir: TEMPLATES_DIR,
+    scriptsDir: SCRIPTS_DIR,
+    packageVersion: VERSION,
+  });
+
+  if (planOnly) {
+    printAdoptionPlan(plan);
+    return;
+  }
+
+  console.log(`\nKnight OS — Adopt Existing Workspace`);
+  console.log(`Workspace: ${workspace}`);
+  console.log('Tip: run `knight adopt --plan` first to preview without writing files.\n');
+
+  const result = applyAdoptionPlan(plan, {
+    templatesDir: TEMPLATES_DIR,
+    scriptsDir: SCRIPTS_DIR,
+    vars: {
+      aiName: config.ai_name,
+      userName: config.user_name,
+      timezone: config.timezone,
+      language: config.language || 'en',
+      channel: 'direct',
+    },
+  });
+
+  const added = result.applied.add.filter((item) => item.path !== '.knight/manifest.json' && item.path !== '.knight/adoption-report.md');
+  console.log(`Added: ${added.length}`);
+  added.forEach((item) => console.log(`  + ${item.path}`));
+  console.log(`Sidecars: ${result.applied.sidecar.length}`);
+  result.applied.sidecar.forEach((item) => console.log(`  + ${item.path} (for ${item.conflict})`));
+  if (plan.manual.length > 0) {
+    console.log('Manual review:');
+    plan.manual.forEach((item) => console.log(`  - ${item.path}: ${item.reason}`));
+  }
+  console.log(`\nBackup kept at:\n  ${result.backupPath}`);
+  console.log(`Manifest:\n  ${result.manifestPath}`);
+  console.log(`Report:\n  ${result.reportPath}\n`);
+}
+
 async function commandChat() {
   const config = loadConfig();
   const workspace = resolveWorkspace(config);
@@ -389,6 +441,9 @@ switch (command) {
   case 'upgrade':
     commandUpgrade();
     break;
+  case 'adopt':
+    commandAdopt();
+    break;
   case 'dashboard':
     commandDashboard();
     break;
@@ -420,6 +475,8 @@ switch (command) {
     console.log('  doctor    Run a workspace health report with next actions');
     console.log('  upgrade   Migrate workspace data + add missing templates safely');
     console.log('            Use --plan to preview without writing files');
+    console.log('  adopt     Adopt an existing OpenClaw workspace without overwriting memory');
+    console.log('            Use --plan to preview preserve/add/sidecar/manual actions');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  rollback  Restore workspace from a previous backup');
     console.log('            Use --list or --dry-run for non-interactive checks');
