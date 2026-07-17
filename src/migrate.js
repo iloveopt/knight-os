@@ -30,6 +30,31 @@ const BACKUP_DIR = '.knight-backups';
 /** Files that must never be overwritten during migration */
 const PROTECTED_FILES = ['SOUL.md', 'MEMORY.md', 'USER.md', 'REDLINES.md'];
 
+/** Files/directories that indicate the workspace already contains user memory. */
+const EXISTING_MEMORY_MARKERS = [
+  'MEMORY.md',
+  'SOUL.md',
+  'USER.md',
+  'REDLINES.md',
+  'AGENTS.md',
+  'memory',
+  'projects',
+  'logs',
+  'reflections',
+];
+
+/** Root/template files that should not be force-overwritten in existing workspaces. */
+const USER_OWNED_TEMPLATE_FILES = [
+  'AGENTS.md',
+  'PROJECTS.md',
+  'TOOLS.md',
+  'HEARTBEAT.md',
+  'SOUL.md',
+  'MEMORY.md',
+  'USER.md',
+  'REDLINES.md',
+];
+
 // ─────────────────────────────────────────────────────────────
 // Version helpers
 // ─────────────────────────────────────────────────────────────
@@ -52,6 +77,46 @@ function readDataVersion(workspace) {
 function writeDataVersion(workspace, version) {
   const versionPath = path.join(workspace, VERSION_FILE);
   fs.writeFileSync(versionPath, String(version) + '\n', 'utf8');
+}
+
+function hasExistingMemory(workspace) {
+  if (!fs.existsSync(workspace)) return false;
+  return EXISTING_MEMORY_MARKERS.some((marker) => fs.existsSync(path.join(workspace, marker)));
+}
+
+function renderTemplate(content, vars) {
+  vars = vars || {};
+  return content
+    .replace(/\{\{AI_NAME\}\}/g, vars.aiName || vars.ai_name || 'Knight')
+    .replace(/\{\{USER_NAME\}\}/g, vars.userName || vars.user_name || 'User')
+    .replace(/\{\{TIMEZONE\}\}/g, vars.timezone || 'UTC')
+    .replace(/\{\{LANGUAGE\}\}/g, vars.language || 'en')
+    .replace(/\{\{CHANNEL\}\}/g, vars.channel || 'direct');
+}
+
+function deepMergeMissing(defaults, existing) {
+  if (!existing || typeof existing !== 'object' || Array.isArray(existing)) {
+    return defaults;
+  }
+
+  const result = Array.isArray(existing) ? existing.slice() : { ...existing };
+  for (const key of Object.keys(defaults)) {
+    const defaultValue = defaults[key];
+    const existingValue = result[key];
+    if (existingValue === undefined) {
+      result[key] = defaultValue;
+    } else if (
+      defaultValue &&
+      typeof defaultValue === 'object' &&
+      !Array.isArray(defaultValue) &&
+      existingValue &&
+      typeof existingValue === 'object' &&
+      !Array.isArray(existingValue)
+    ) {
+      result[key] = deepMergeMissing(defaultValue, existingValue);
+    }
+  }
+  return result;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -210,9 +275,19 @@ function runMigrations(workspace) {
   const pending = getPendingMigrations(currentVersion, targetVersion);
 
   if (pending.length === 0) {
+    let backupPath = null;
+    try {
+      backupPath = backupWorkspace(workspace);
+    } catch (err) {
+      return {
+        migrated: false,
+        backupPath: null,
+        error: new Error(`Backup failed, aborting migration: ${err.message}`),
+      };
+    }
     // No migration steps defined yet — just bump the version
     writeDataVersion(workspace, targetVersion);
-    return { migrated: true, backupPath: null, error: null };
+    return { migrated: true, backupPath, error: null };
   }
 
   console.log(`\n🔄 knight-os: workspace needs upgrade (v${currentVersion} → v${targetVersion})`);
@@ -276,7 +351,8 @@ function refreshTemplates(workspace, templatesDir, opts) {
   for (const relPath of filesToWrite) {
     const dest = path.join(workspace, relPath);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
-    fs.copyFileSync(path.join(templatesDir, relPath), dest);
+    const content = fs.readFileSync(path.join(templatesDir, relPath), 'utf8');
+    fs.writeFileSync(dest, renderTemplate(content, opts.vars), 'utf8');
     added.push(relPath);
   }
 
@@ -362,7 +438,12 @@ function createUpgradePlan(workspace, templatesDir) {
 
 module.exports = {
   CURRENT_DATA_VERSION,
+  EXISTING_MEMORY_MARKERS,
   PROTECTED_FILES,
+  USER_OWNED_TEMPLATE_FILES,
+  deepMergeMissing,
+  hasExistingMemory,
+  renderTemplate,
   readDataVersion,
   writeDataVersion,
   backupWorkspace,

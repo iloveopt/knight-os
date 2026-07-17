@@ -5,7 +5,14 @@ const path = require('path');
 const os = require('os');
 const readline = require('readline');
 const { spawnSync } = require('child_process');
-const { runMigrations, writeDataVersion, CURRENT_DATA_VERSION } = require('./migrate');
+const {
+  backupWorkspace,
+  deepMergeMissing,
+  hasExistingMemory,
+  renderTemplate,
+  writeDataVersion,
+  CURRENT_DATA_VERSION,
+} = require('./migrate');
 
 const DEFAULT_WORKSPACE = path.join(os.homedir(), '.openclaw', 'workspace');
 
@@ -164,6 +171,44 @@ function registerHeartbeat(workspace, intervalHours) {
   }
 }
 
+function writeSetupTemplates(workspace, vars, opts) {
+  opts = opts || {};
+  const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
+  const safeExistingPath = Boolean(opts.safeExistingPath);
+  const overwriteTemplates = Boolean(opts.overwriteTemplates);
+  const written = [];
+  const skipped = [];
+  const warnings = [];
+
+  function copyTemplates(srcDir, destDir) {
+    const entries = fs.readdirSync(srcDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const src = path.join(srcDir, entry.name);
+      const dest = path.join(destDir, entry.name);
+      if (entry.isDirectory()) {
+        fs.mkdirSync(dest, { recursive: true });
+        copyTemplates(src, dest);
+      } else {
+        const relPath = path.relative(workspace, dest);
+        if (fs.existsSync(dest) && (safeExistingPath || !overwriteTemplates)) {
+          skipped.push(relPath);
+          continue;
+        }
+        try {
+          const content = fs.readFileSync(src, 'utf-8');
+          fs.writeFileSync(dest, renderTemplate(content, vars), 'utf-8');
+          written.push(relPath);
+        } catch (e) {
+          warnings.push({ path: relPath, message: e.message });
+        }
+      }
+    }
+  }
+
+  copyTemplates(TEMPLATES_DIR, workspace);
+  return { written, skipped, warnings };
+}
+
 async function setup() {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   const separator = '──────────────────────────────────────────────────────';
@@ -185,6 +230,7 @@ async function setup() {
 
   const workspaceExists = fs.existsSync(workspace);
   const hasCoreFiles = workspaceExists && fs.existsSync(path.join(workspace, 'AGENTS.md'));
+  const existingMemory = hasExistingMemory(workspace);
 
   if (workspaceExists) {
     console.log(`  ✅ Workspace path exists: ${workspace}`);
@@ -201,42 +247,33 @@ async function setup() {
     console.log('not found in PATH; continuing with workspace setup');
   }
 
-  // Files that contain user's personal memory/identity — never overwrite by default
-  const PROTECTED_FILES = ['SOUL.md', 'MEMORY.md', 'USER.md', 'REDLINES.md'];
-  const hasPersonalMemory = hasCoreFiles && PROTECTED_FILES.some(
-    f => fs.existsSync(path.join(workspace, f))
-  );
+  const safeExistingPath = workspaceExists && existingMemory;
+  let writeTemplates = true;
+  let overwriteTemplates = !safeExistingPath && !workspaceExists;
 
-  let overwrite = false;
-  let overwriteProtected = false;
-
-  if (hasCoreFiles) {
-    if (hasPersonalMemory) {
-      console.log(`\n⚠️  Existing OpenClaw workspace detected at: ${workspace}`);
-      console.log('   Protected files found: SOUL.md, MEMORY.md, USER.md, REDLINES.md');
-      console.log('   These contain your personal memory and identity.\n');
-      console.log('   Knight OS will add missing files and update scripts/templates.');
-      console.log('   Your existing memory files will NOT be touched.\n');
-      const answer = await ask(rl, 'Also overwrite protected files? (y/N)', 'N');
-      overwriteProtected = answer.toLowerCase().startsWith('y');
-      if (overwriteProtected) {
-        console.log('\n  ⚠️  Protected files WILL be overwritten. Existing content will be lost.');
-      } else {
-        console.log('\n  ✅ Protected files preserved. Only missing/new files will be added.');
-      }
-      overwrite = true; // always write non-protected files (scripts, AGENTS.md, HEARTBEAT.md, PROJECTS.md)
-    } else {
-      console.log(`\n⚠️  Workspace already exists at: ${workspace}`);
-      const answer = await ask(rl, 'Overwrite existing files? (y/N)', 'N');
-      overwrite = answer.toLowerCase().startsWith('y');
-      overwriteProtected = overwrite;
-      if (!overwrite) {
-        console.log('\nSkipping template write. Continuing with other setup steps...');
-      }
+  if (safeExistingPath) {
+    console.log(`\n⚠️  Existing memory/OpenClaw workspace detected at: ${workspace}`);
+    console.log('   Knight OS will preserve existing files and only add missing capability files.');
+    console.log('   Existing AGENTS.md, PROJECTS.md, TOOLS.md, HEARTBEAT.md, MEMORY.md, and memory/*.md files will be skipped.\n');
+  } else if (hasCoreFiles) {
+    console.log(`\n⚠️  Workspace already exists at: ${workspace}`);
+    const answer = await ask(rl, 'Overwrite existing files? (y/N)', 'N');
+    overwriteTemplates = answer.toLowerCase().startsWith('y');
+    writeTemplates = overwriteTemplates;
+    if (!writeTemplates) {
+      console.log('\nSkipping template write. Continuing with other setup steps...');
     }
-  } else {
-    overwrite = true;
-    overwriteProtected = true;
+  }
+
+  let setupBackupPath = null;
+  if (safeExistingPath) {
+    try {
+      setupBackupPath = backupWorkspace(workspace);
+    } catch (e) {
+      console.log(`\n❌ Failed to create setup backup: ${e.message}`);
+      closeAndExit(1);
+      return;
+    }
   }
 
   // Create required dirs
@@ -299,57 +336,12 @@ async function setup() {
   console.log('⚙️  Writing workspace files...\n');
 
   // Write templates
-  if (overwrite || !hasCoreFiles) {
-    const TEMPLATES_DIR = path.join(__dirname, '..', 'templates');
+  if (writeTemplates) {
     const vars = { aiName, userName, timezone, language };
-
-    function fillTemplate(content, v) {
-      return content
-        .replace(/\{\{AI_NAME\}\}/g, v.aiName)
-        .replace(/\{\{USER_NAME\}\}/g, v.userName)
-        .replace(/\{\{TIMEZONE\}\}/g, v.timezone)
-        .replace(/\{\{LANGUAGE\}\}/g, v.language || 'en')
-        .replace(/\{\{CHANNEL\}\}/g, 'direct');
-    }
-
-    function copyTemplates(srcDir, destDir, isRoot) {
-      const entries = fs.readdirSync(srcDir, { withFileTypes: true });
-      for (const entry of entries) {
-        const src = path.join(srcDir, entry.name);
-        const dest = path.join(destDir, entry.name);
-        if (entry.isDirectory()) {
-          fs.mkdirSync(dest, { recursive: true });
-          copyTemplates(src, dest, false);
-        } else {
-          // Check if this is a protected file (root level only)
-          const isProtected = isRoot && PROTECTED_FILES.includes(entry.name);
-          if (isProtected && !overwriteProtected) {
-            if (!fs.existsSync(dest)) {
-              // File doesn't exist yet — safe to create
-              try {
-                const content = fs.readFileSync(src, 'utf-8');
-                fs.writeFileSync(dest, fillTemplate(content, vars), 'utf-8');
-                console.log(`  ✅ ${path.relative(workspace, dest)}`);
-              } catch (e) {
-                console.log(`  ⚠️  ${path.relative(workspace, dest)}: ${e.message}`);
-              }
-            } else {
-              console.log(`  🔒 ${path.relative(workspace, dest)} (protected, skipped)`);
-            }
-            continue;
-          }
-          try {
-            const content = fs.readFileSync(src, 'utf-8');
-            fs.writeFileSync(dest, fillTemplate(content, vars), 'utf-8');
-            console.log(`  ✅ ${path.relative(workspace, dest)}`);
-          } catch (e) {
-            console.log(`  ⚠️  ${path.relative(workspace, dest)}: ${e.message}`);
-          }
-        }
-      }
-    }
-
-    copyTemplates(TEMPLATES_DIR, workspace, true);
+    const result = writeSetupTemplates(workspace, vars, { safeExistingPath, overwriteTemplates });
+    result.written.forEach((relPath) => console.log(`  ✅ ${relPath}`));
+    result.skipped.forEach((relPath) => console.log(`  🔒 ${relPath} (existing, skipped)`));
+    result.warnings.forEach((warning) => console.log(`  ⚠️  ${warning.path}: ${warning.message}`));
   } else {
     console.log('  ⏭️  Templates skipped (existing files preserved)');
   }
@@ -372,7 +364,7 @@ async function setup() {
   }
 
   // Write knight.config.json
-  const config = {
+  const defaultConfig = {
     workspace,
     ai_name: aiName,
     user_name: userName,
@@ -402,6 +394,15 @@ async function setup() {
 
   try {
     const configDest = path.join(workspace, 'knight.config.json');
+    let existingConfig = {};
+    if (fs.existsSync(configDest)) {
+      try {
+        existingConfig = JSON.parse(fs.readFileSync(configDest, 'utf-8'));
+      } catch {}
+    }
+    const config = fs.existsSync(configDest)
+      ? deepMergeMissing(defaultConfig, existingConfig)
+      : defaultConfig;
     fs.writeFileSync(configDest, JSON.stringify(config, null, 2) + '\n', 'utf-8');
     console.log('  ✅ knight.config.json');
   } catch (e) {
@@ -436,6 +437,9 @@ async function setup() {
 
   // Record the data version so future upgrades know where to start
   writeDataVersion(workspace, CURRENT_DATA_VERSION);
+  if (setupBackupPath) {
+    console.log(`\n📦 Setup backup kept at:\n   ${setupBackupPath}`);
+  }
 
   console.log(`\n${separator}`);
   console.log('✅ Knight OS setup complete!\n');
@@ -456,4 +460,4 @@ async function setup() {
   console.log(`${separator}\n`);
 }
 
-module.exports = { setup };
+module.exports = { setup, writeSetupTemplates };
