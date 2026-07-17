@@ -230,6 +230,19 @@ function main() {
   );
   fs.rmSync(tempClaude, { recursive: true, force: true });
 
+  const tempUnmanagedCore = fs.mkdtempSync(path.join(os.tmpdir(), 'knight-sync-unmanaged-core-'));
+  const unmanagedCoreWorkspace = path.join(tempUnmanagedCore, 'workspace');
+  fs.mkdirSync(path.join(unmanagedCoreWorkspace, '.knight', 'core'), { recursive: true });
+  fs.writeFileSync(path.join(unmanagedCoreWorkspace, '.knight', 'core', 'identity.md'), 'user core identity\n');
+  const unmanagedCoreEnv = { KNIGHT_WORKSPACE: unmanagedCoreWorkspace };
+  run(['sync', '--agent', 'claude'], unmanagedCoreEnv);
+  assert.strictEqual(
+    fs.readFileSync(path.join(unmanagedCoreWorkspace, '.knight', 'core', 'identity.md'), 'utf8'),
+    'user core identity\n',
+    'sync overwrote existing unmanaged core identity'
+  );
+  fs.rmSync(tempUnmanagedCore, { recursive: true, force: true });
+
   const tempCodex = fs.mkdtempSync(path.join(os.tmpdir(), 'knight-sync-codex-'));
   const codexWorkspace = path.join(tempCodex, 'workspace');
   fs.mkdirSync(codexWorkspace, { recursive: true });

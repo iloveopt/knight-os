@@ -193,6 +193,24 @@ function chooseAdapterPath(workspace, manifest, adapter) {
   };
 }
 
+function chooseCorePath(workspace, manifest, spec) {
+  const exists = fs.existsSync(path.join(workspace, spec.path));
+
+  if (!exists || isManaged(manifest, spec.path)) {
+    return {
+      path: spec.path,
+      action: exists ? 'update' : 'create',
+      reason: exists ? 'managed Knight core file' : 'core path is available',
+    };
+  }
+
+  return {
+    path: spec.path,
+    action: 'skip',
+    reason: 'existing unmanaged core file preserved',
+  };
+}
+
 function createSyncPlan(workspace, opts) {
   opts = opts || {};
   const agent = opts.agent;
@@ -208,13 +226,11 @@ function createSyncPlan(workspace, opts) {
   }
 
   const core = CORE_FILES.map((spec) => {
-    const exists = fs.existsSync(path.join(workspace, spec.path));
-    return {
-      path: spec.path,
-      action: exists ? 'update' : 'create',
+    const target = chooseCorePath(workspace, manifest, spec);
+    return Object.assign({}, target, {
       source: spec.sources.join(', '),
       content: buildCoreContent(workspace, templatesDir, spec, vars),
-    };
+    });
   });
 
   const adapters = agents.map((name) => {
@@ -241,6 +257,10 @@ function applySyncPlan(plan, opts) {
   fs.mkdirSync(plan.workspace, { recursive: true });
 
   for (const item of plan.core) {
+    if (item.action === 'skip') {
+      skipped.push(item);
+      continue;
+    }
     const dest = path.join(plan.workspace, item.path);
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     fs.writeFileSync(dest, item.content, 'utf8');
@@ -297,7 +317,10 @@ function printSyncPlan(plan) {
   }
 
   console.log('core:');
-  plan.core.forEach((item) => console.log(`  - ${item.action}: ${item.path} (from ${item.source})`));
+  plan.core.forEach((item) => {
+    const suffix = item.action === 'skip' ? item.reason : `from ${item.source}`;
+    console.log(`  - ${item.action}: ${item.path} (${suffix})`);
+  });
   console.log('\nadapters:');
   plan.adapters.forEach((item) => {
     const suffix = item.conflict ? `; conflict: ${item.conflict}` : '';
