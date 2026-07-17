@@ -200,6 +200,69 @@ function main() {
   assert.ok(countBackups(adoptWorkspace) > 0, 'adopt did not back up before writing');
   fs.rmSync(tempAdopt, { recursive: true, force: true });
 
+  const adaptersList = run(['adapters', 'list']);
+  assert.match(adaptersList, /openclaw/);
+  assert.match(adaptersList, /claude/);
+  assert.match(adaptersList, /codex/);
+
+  const tempClaude = fs.mkdtempSync(path.join(os.tmpdir(), 'knight-sync-claude-'));
+  const claudeWorkspace = path.join(tempClaude, 'workspace');
+  fs.mkdirSync(claudeWorkspace, { recursive: true });
+  fs.cpSync(path.join(root, 'templates'), claudeWorkspace, { recursive: true });
+  const claudeEnv = { KNIGHT_WORKSPACE: claudeWorkspace };
+  const beforeSyncPlan = snapshotTree(claudeWorkspace);
+  const syncPlan = run(['sync', '--agent', 'claude', '--plan'], claudeEnv);
+  const afterSyncPlan = snapshotTree(claudeWorkspace);
+  assert.strictEqual(afterSyncPlan, beforeSyncPlan, 'sync --plan changed the workspace');
+  assert.match(syncPlan, /Sync Plan/);
+  assert.match(syncPlan, /CLAUDE\.md/);
+  run(['sync', '--agent', 'claude'], claudeEnv);
+  assert.ok(fs.existsSync(path.join(claudeWorkspace, 'CLAUDE.md')), 'sync did not create CLAUDE.md');
+  assert.ok(fs.existsSync(path.join(claudeWorkspace, '.knight', 'core', 'identity.md')), 'sync did not create canonical identity');
+  assert.ok(fs.existsSync(path.join(claudeWorkspace, '.knight', 'core', 'user.md')), 'sync did not create canonical user');
+  assert.ok(fs.existsSync(path.join(claudeWorkspace, '.knight', 'core', 'memory.md')), 'sync did not create canonical memory');
+  assert.ok(fs.existsSync(path.join(claudeWorkspace, '.knight', 'core', 'rules.md')), 'sync did not create canonical rules');
+  assert.ok(fs.existsSync(path.join(claudeWorkspace, '.knight', 'core', 'projects.md')), 'sync did not create canonical projects');
+  const claudeManifest = JSON.parse(fs.readFileSync(path.join(claudeWorkspace, '.knight', 'manifest.json'), 'utf8'));
+  assert.ok(
+    claudeManifest.files.some((item) => item.path === 'CLAUDE.md' && item.agent === 'claude' && item.managedByKnight),
+    'manifest did not record claude adapter output'
+  );
+  fs.rmSync(tempClaude, { recursive: true, force: true });
+
+  const tempCodex = fs.mkdtempSync(path.join(os.tmpdir(), 'knight-sync-codex-'));
+  const codexWorkspace = path.join(tempCodex, 'workspace');
+  fs.mkdirSync(codexWorkspace, { recursive: true });
+  fs.writeFileSync(path.join(codexWorkspace, 'AGENTS.md'), 'existing openclaw agents\n');
+  fs.writeFileSync(path.join(codexWorkspace, 'CLAUDE.md'), 'existing claude instructions\n');
+  const codexEnv = { KNIGHT_WORKSPACE: codexWorkspace };
+  run(['sync', '--agent', 'codex'], codexEnv);
+  assert.strictEqual(
+    fs.readFileSync(path.join(codexWorkspace, 'AGENTS.md'), 'utf8'),
+    'existing openclaw agents\n',
+    'codex sync overwrote existing AGENTS.md'
+  );
+  assert.ok(fs.existsSync(path.join(codexWorkspace, 'AGENTS.codex.md')), 'codex sync did not create sidecar instruction');
+
+  run(['sync', '--agent', 'claude'], codexEnv);
+  assert.strictEqual(
+    fs.readFileSync(path.join(codexWorkspace, 'CLAUDE.md'), 'utf8'),
+    'existing claude instructions\n',
+    'claude sync overwrote existing CLAUDE.md'
+  );
+  assert.ok(fs.existsSync(path.join(codexWorkspace, 'CLAUDE.knight.md')), 'claude sync did not create safe sidecar');
+  fs.rmSync(tempCodex, { recursive: true, force: true });
+
+  const tempAll = fs.mkdtempSync(path.join(os.tmpdir(), 'knight-sync-all-'));
+  const allWorkspace = path.join(tempAll, 'workspace');
+  fs.mkdirSync(allWorkspace, { recursive: true });
+  const allEnv = { KNIGHT_WORKSPACE: allWorkspace };
+  run(['sync', '--all'], allEnv);
+  assert.ok(fs.existsSync(path.join(allWorkspace, 'AGENTS.md')), 'sync --all did not create openclaw adapter');
+  assert.ok(fs.existsSync(path.join(allWorkspace, 'CLAUDE.md')), 'sync --all did not create claude adapter');
+  assert.ok(fs.existsSync(path.join(allWorkspace, 'AGENTS.codex.md')), 'sync --all did not create codex adapter');
+  fs.rmSync(tempAll, { recursive: true, force: true });
+
   console.log('smoke tests passed');
 }
 
