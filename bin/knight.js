@@ -12,6 +12,7 @@ const { dashboard } = require('../src/dashboard');
 const { rollback } = require('../src/rollback');
 const { doctor } = require('../src/doctor');
 const { getFederationStatus, inspectWorkspace } = require('../src/federation');
+const { exportClaudeHandoff } = require('../src/export');
 const {
   applyAdoptionPlan,
   createAdoptionPlan,
@@ -433,16 +434,16 @@ function commandAdapters() {
 
 function commandSync() {
   const config = loadConfig();
-  const workspace = resolveWorkspace(config);
   const args = process.argv.slice(3);
+  const workspace = workspaceFromArgs(args);
   const planOnly = args.includes('--plan') || args.includes('--dry-run');
   const all = args.includes('--all');
   const agentIdx = args.indexOf('--agent');
   const agent = agentIdx !== -1 ? args[agentIdx + 1] : null;
 
   if (!all && !agent) {
-    console.error('Usage: knight sync --agent <openclaw|claude|codex> [--plan]');
-    console.error('       knight sync --all [--plan]');
+    console.error('Usage: knight sync --agent <openclaw|claude|codex> [--workspace PATH] [--plan]');
+    console.error('       knight sync --all [--workspace PATH] [--plan]');
     process.exit(1);
   }
 
@@ -489,6 +490,37 @@ function commandSync() {
     result.conflicts.forEach((item) => console.log(`  - ${item.path}: ${item.reason}`));
   }
   console.log(`Manifest:\n  ${result.manifestPath}\n`);
+}
+
+function commandExport() {
+  const target = process.argv[3];
+  const args = process.argv.slice(4);
+  if (target !== 'claude') {
+    console.error('Usage: knight export claude --workspace PATH --output PATH');
+    process.exit(1);
+  }
+  const workspace = workspaceFromArgs(args);
+  const outputIdx = args.indexOf('--output');
+  if (outputIdx === -1 || !args[outputIdx + 1]) {
+    console.error('Usage: knight export claude --workspace PATH --output PATH');
+    process.exit(1);
+  }
+  const config = loadConfig();
+  const result = exportClaudeHandoff(workspace, path.resolve(args[outputIdx + 1]), {
+    packageVersion: VERSION,
+    vars: {
+      aiName: config.ai_name,
+      userName: config.user_name,
+      timezone: config.timezone,
+      language: config.language || 'en',
+      channel: 'direct',
+    },
+  });
+  console.log('\nKnight OS — Claude Code Context Handoff');
+  console.log(`Source workspace: ${result.workspace}`);
+  console.log(`Output: ${result.output}`);
+  console.log(`Files: ${result.files.length}`);
+  console.log('Projection-only bundle created. Source workspace was not modified.\n');
 }
 
 async function commandChat() {
@@ -540,6 +572,14 @@ switch (command) {
   case 'sync':
     commandSync();
     break;
+  case 'export':
+    try {
+      commandExport();
+    } catch (error) {
+      console.error(`Export failed: ${error.message}`);
+      process.exitCode = 1;
+    }
+    break;
   case 'dashboard':
     commandDashboard();
     break;
@@ -579,7 +619,9 @@ switch (command) {
     console.log('  adapters  List available agent adapters');
     console.log('            Use `knight adapters list`');
     console.log('  sync      Generate read-only .knight/core projections and adapter instructions');
-    console.log('            Use --agent openclaw|claude|codex, --all, and --plan');
+    console.log('            Use --agent openclaw|claude|codex, --all, --workspace PATH, and --plan');
+    console.log('  export    Create a portable, projection-only agent context handoff');
+    console.log('            Use `knight export claude --workspace PATH --output PATH`');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  rollback  Restore workspace from a previous backup');
     console.log('            Use --list or --dry-run for non-interactive checks');

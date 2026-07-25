@@ -20,8 +20,10 @@ Make Knight OS a local-first personal AI Context Hub: **Bring your own agent. Ke
 
 Using the existing manifest avoids two competing ownership ledgers. A v1 manifest is read compatibly and upgraded on the next successful sync.
 
-## Planning and Status
-`knight inspect` classifies known files without writing. `knight status` compares current hashes with registry hashes to expose source drift and managed-output conflict.
+## Planning, Status, and Handoff
+`knight inspect` classifies known files without writing. `knight status` compares current hashes with registry hashes to expose source drift and managed-output conflict. `knight sync --workspace PATH` explicitly selects the source workspace rather than relying on configuration or `KNIGHT_WORKSPACE`.
+
+`knight export claude --workspace SOURCE --output HANDOFF` creates a portable Claude Code bundle directly from generated projections. Export is projection-only by default: it includes the five `.knight/core/` domain snapshots, a bundle manifest, and a root `CLAUDE.md`, but never copies raw logs, `.env`, credentials, contracts, or arbitrary sources. It does not write the source workspace and refuses to overwrite a non-empty output directory.
 
 ## Conflict Policy
 Unmanaged adapter targets are preserved and a known sidecar is selected. If both target and sidecar are unmanaged, sync reports the conflict and writes neither. Modified managed outputs are also preserved and reported as conflicts.
