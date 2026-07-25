@@ -73,11 +73,15 @@ function listMemoryPatternSources(workspace) {
     });
 }
 
-function inspectWorkspace(workspace) {
-  const registry = readRegistry(workspace);
+function sourceSpecsForWorkspace(workspace) {
   const byPath = new Map();
   SOURCE_SPECS.concat(listMemoryPatternSources(workspace)).forEach((spec) => byPath.set(spec.path, spec));
-  const sources = Array.from(byPath.values())
+  return Array.from(byPath.values());
+}
+
+function inspectWorkspace(workspace) {
+  const registry = readRegistry(workspace);
+  const sources = sourceSpecsForWorkspace(workspace)
     .filter((spec) => fs.existsSync(path.join(workspace, spec.path)))
     .map((spec) => ({
       id: spec.id,
@@ -150,4 +154,5 @@ module.exports = {
   inspectWorkspace,
   manifestPath,
   readRegistry,
+  sourceSpecsForWorkspace,
 };

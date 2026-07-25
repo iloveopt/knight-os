@@ -8,6 +8,7 @@ const {
   hashContent,
   hashFile,
   readRegistry,
+  sourceSpecsForWorkspace,
 } = require('./federation');
 
 const CORE_FILES = [
@@ -31,9 +32,20 @@ function sourceId(relPath) {
   return spec ? spec.id : relPath.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
 }
 
+function sourcesForCore(workspace, spec) {
+  const sources = spec.sources.slice();
+  if (spec.domain === 'memory') {
+    for (const source of sourceSpecsForWorkspace(workspace)) {
+      if (source.domain === 'memory' && /patterns?\.md$/i.test(source.path) && !sources.includes(source.path)) sources.push(source.path);
+    }
+  }
+  return sources;
+}
+
 function buildCoreContent(workspace, spec) {
+  const sources = sourcesForCore(workspace, spec);
   const sections = [];
-  for (const source of spec.sources) {
+  for (const source of sources) {
     const content = readIfExists(path.join(workspace, source));
     if (content) sections.push(`## Source: ${sourceId(source)} (${source})\n\n${content}`);
   }
@@ -47,7 +59,7 @@ function buildCoreContent(workspace, spec) {
   return [
     `# Knight Context Projection: ${spec.title}`,
     '',
-    `<!-- Knight-managed projection. Domain: ${spec.domain}. Sources: ${spec.sources.map(sourceId).join(', ')}. -->`,
+    `<!-- Knight-managed projection. Domain: ${spec.domain}. Sources: ${sources.map(sourceId).join(', ')}. -->`,
     '<!-- Read-only generated snapshot. User-owned source files are authoritative. -->',
     '',
     sections.length ? sections.join('\n\n---\n\n') : '_No source content found yet._',
@@ -101,8 +113,9 @@ function createSyncPlan(workspace, opts) {
   const invalid = agents.filter((name) => !ADAPTERS[name]);
   if (invalid.length) return { workspace, invalid, core: [], adapters: [] };
   const core = CORE_FILES.map((spec) => {
+    const sources = sourcesForCore(workspace, spec);
     const content = buildCoreContent(workspace, spec);
-    return Object.assign(targetState(workspace, registry, spec.path, content, 'projection'), spec, { content, sourceIds: spec.sources.map(sourceId) });
+    return Object.assign(targetState(workspace, registry, spec.path, content, 'projection'), spec, { content, sourceIds: sources.map(sourceId) });
   });
   const adapters = agents.map((name) => {
     const adapter = ADAPTERS[name];
@@ -118,7 +131,7 @@ function upsert(items, entry, key) {
 }
 
 function currentSources(workspace, priorSources, now) {
-  return SOURCE_SPECS.filter((spec) => fs.existsSync(path.join(workspace, spec.path))).map((spec) => {
+  return sourceSpecsForWorkspace(workspace).filter((spec) => fs.existsSync(path.join(workspace, spec.path))).map((spec) => {
     const prior = priorSources.find((item) => item.id === spec.id) || {};
     return Object.assign({}, prior, spec, { ownership: 'user', writePolicy: 'never', lastSeenHash: hashFile(path.join(workspace, spec.path)), lastSeenAt: now, driftStatus: 'clean' });
   });

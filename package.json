@@ -37,6 +37,7 @@
     "src/",
     "scripts/",
     "templates/",
+    "docs/",
     "README.md",
     "LICENSE"
   ]

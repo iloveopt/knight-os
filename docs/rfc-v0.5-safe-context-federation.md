@@ -13,7 +13,7 @@ Make Knight OS a local-first personal AI Context Hub: **Bring your own agent. Ke
 - No changed inputs means sync performs no output writes.
 
 ## Model
-- **Source:** a user-owned file mapped to `identity`, `user`, `memory`, `rules`, or `projects`.
+- **Source:** a user-owned file mapped to `identity`, `user`, `memory`, `rules`, or `projects`. In v0.5, the memory domain also discovers top-level `memory/*pattern*.md` files; sync includes them in the memory projection and registry.
 - **Projection:** generated domain snapshot under `.knight/core/`, with source references.
 - **Adapter:** agent-specific entry file pointing to projections.
 - **Registry:** schema v2 state in `.knight/manifest.json`, retaining the v1 `files` field for compatibility while adding structured `sources`, `projections`, and `adapters`.

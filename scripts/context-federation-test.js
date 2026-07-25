@@ -54,6 +54,22 @@ function main() {
     fs.rmSync(item.rootDir, { recursive: true, force: true });
   }
 
+  // Dynamic memory/*patterns.md sources are projected, registered, and drift-tracked.
+  {
+    const item = workspace();
+    fs.mkdirSync(path.join(item.workspace, 'memory'), { recursive: true });
+    fs.writeFileSync(path.join(item.workspace, 'memory', 'team-patterns.md'), 'team context\n');
+    const inspected = inspectWorkspace(item.workspace);
+    assert.ok(inspected.sources.some((entry) => entry.path === 'memory/team-patterns.md'));
+    sync(item.workspace, 'claude', '2026-07-25T01:00:00.000Z');
+    assert.match(read(item.workspace, '.knight/core/memory.md'), /team context/);
+    const registry = JSON.parse(read(item.workspace, '.knight/manifest.json'));
+    assert.ok(registry.sources.some((entry) => entry.path === 'memory/team-patterns.md'));
+    fs.writeFileSync(path.join(item.workspace, 'memory', 'team-patterns.md'), 'changed team context\n');
+    assert.ok(getFederationStatus(item.workspace).sourceDrift.some((entry) => entry.path === 'memory/team-patterns.md'));
+    fs.rmSync(item.rootDir, { recursive: true, force: true });
+  }
+
   // Existing unmanaged adapter is preserved and Knight writes a managed sidecar.
   {
     const item = workspace();
