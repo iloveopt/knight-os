@@ -11,6 +11,7 @@ const { setup } = require('../src/setup');
 const { dashboard } = require('../src/dashboard');
 const { rollback } = require('../src/rollback');
 const { doctor } = require('../src/doctor');
+const { getFederationStatus, inspectWorkspace } = require('../src/federation');
 const {
   applyAdoptionPlan,
   createAdoptionPlan,
@@ -192,45 +193,54 @@ async function commandInit() {
   console.log('');
 }
 
-function commandStatus() {
+function workspaceFromArgs(args) {
   const config = loadConfig();
-  const workspace = resolveWorkspace(config);
-  const requiredFiles = [
-    'AGENTS.md',
-    'SOUL.md',
-    'MEMORY.md',
-    'HEARTBEAT.md',
-    'REDLINES.md',
-    'USER.md',
-    'TOOLS.md',
-    'memory/ai-patterns.md',
-    'memory/user-patterns.md',
-  ];
-
-  console.log(`\n📋 Knight OS — Workspace Status`);
-  console.log(`   Directory: ${workspace}\n`);
-
-  if (!fs.existsSync(workspace)) {
-    console.log('   ❌ Workspace directory does not exist.');
-    console.log('   Run "knight init" to create it.\n');
-    process.exit(1);
+  const index = args.indexOf('--workspace');
+  if (index !== -1) {
+    if (!args[index + 1]) throw new Error('--workspace requires a path');
+    return path.resolve(args[index + 1]);
   }
+  return resolveWorkspace(config);
+}
 
-  let ok = 0;
-  let missing = 0;
-
-  for (const file of requiredFiles) {
-    const fullPath = path.join(workspace, file);
-    if (fs.existsSync(fullPath)) {
-      console.log(`   ✅ ${file}`);
-      ok++;
-    } else {
-      console.log(`   ❌ ${file}`);
-      missing++;
-    }
+function commandInspect() {
+  const args = process.argv.slice(3);
+  const workspace = workspaceFromArgs(args);
+  const result = inspectWorkspace(workspace);
+  if (args.includes('--json')) {
+    console.log(JSON.stringify(result, null, 2));
+    return;
   }
+  console.log(`\nKnight OS Context Inspection\nWorkspace: ${workspace}\n`);
+  const print = (title, items) => {
+    console.log(`${title}:`);
+    if (!items.length) console.log('  - none');
+    items.forEach((item) => console.log(`  - ${item.path} | ${item.domain || item.agent} | ownership=${item.ownership}`));
+  };
+  print('sources', result.sources);
+  print('projections', result.projections);
+  print('adapters', result.adapters);
+  console.log('\nInspection is read-only.\n');
+}
 
-  console.log(`\n   Result: ${ok} present, ${missing} missing.\n`);
+function commandStatus() {
+  const args = process.argv.slice(3);
+  const workspace = workspaceFromArgs(args);
+  const status = getFederationStatus(workspace);
+  if (args.includes('--json')) {
+    console.log(JSON.stringify(status, null, 2));
+    return;
+  }
+  console.log(`\nKnight OS Context Status\nWorkspace: ${workspace}\n`);
+  const print = (title, items) => {
+    console.log(`${title}:`);
+    if (!items.length) console.log('  - none');
+    items.forEach((item) => console.log(`  - ${item.path}`));
+  };
+  print('source drift', status.sourceDrift);
+  print('managed output conflicts', status.outputConflicts);
+  print('missing registered artifacts', status.missing);
+  console.log(`\nResult: ${status.clean ? 'clean' : 'attention required'}\n`);
 }
 
 function commandVersion() {
@@ -461,7 +471,7 @@ function commandSync() {
 
   console.log('\nKnight OS — Sync Agent Adapter');
   console.log(`Workspace: ${workspace}`);
-  console.log('Same memory, multiple agents. Knight is not a scheduler.\n');
+  console.log('Bring your own agent. Keep your context. Knight is not a scheduler.\n');
 
   const result = applySyncPlan(plan, { packageVersion: VERSION });
   const coreWrites = result.written.filter((item) => item.path.startsWith('.knight/core/'));
@@ -471,9 +481,12 @@ function commandSync() {
   coreWrites.forEach((item) => console.log(`  ${item.action === 'update' ? '↻' : '+'} ${item.path}`));
   console.log(`Adapter files: ${adapterWrites.length}`);
   adapterWrites.forEach((item) => console.log(`  ${item.action === 'update' ? '↻' : '+'} ${item.path} (${item.agent})`));
-  if (result.skipped.length > 0) {
-    console.log('Skipped:');
-    result.skipped.forEach((item) => console.log(`  - ${item.path}: ${item.reason}`));
+  if (result.unchanged.length > 0) {
+    console.log(`Unchanged (no-op): ${result.unchanged.length}`);
+  }
+  if (result.conflicts.length > 0) {
+    console.log('Conflicts (preserved):');
+    result.conflicts.forEach((item) => console.log(`  - ${item.path}: ${item.reason}`));
   }
   console.log(`Manifest:\n  ${result.manifestPath}\n`);
 }
@@ -505,6 +518,9 @@ switch (command) {
     break;
   case 'chat':
     commandChat();
+    break;
+  case 'inspect':
+    commandInspect();
     break;
   case 'status':
     commandStatus();
@@ -551,7 +567,10 @@ switch (command) {
     console.log('            Existing memory files are backed up and preserved');
     console.log('  init      Initialize a new workspace');
     console.log('  chat      Start interactive AI chat session');
-    console.log('  status    Check workspace file status');
+    console.log('  inspect   Classify context sources/adapters without writing');
+    console.log('            Use --workspace PATH and --json');
+    console.log('  status    Report source drift and managed-output conflicts');
+    console.log('            Use --workspace PATH and --json');
     console.log('  doctor    Run a workspace health report with next actions');
     console.log('  upgrade   Migrate workspace data + add missing templates safely');
     console.log('            Use --plan to preview without writing files');
@@ -559,7 +578,7 @@ switch (command) {
     console.log('            Use --plan to preview preserve/add/sidecar/manual actions');
     console.log('  adapters  List available agent adapters');
     console.log('            Use `knight adapters list`');
-    console.log('  sync      Generate canonical .knight/core memory and adapter instructions');
+    console.log('  sync      Generate read-only .knight/core projections and adapter instructions');
     console.log('            Use --agent openclaw|claude|codex, --all, and --plan');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  rollback  Restore workspace from a previous backup');
