@@ -4,7 +4,7 @@ const assert = require('assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { execFileSync } = require('child_process');
+const { execFileSync, spawnSync } = require('child_process');
 const { inspectWorkspace, getFederationStatus } = require('../src/federation');
 const { applySyncPlan, createSyncPlan } = require('../src/adapters');
 
@@ -12,8 +12,12 @@ const root = path.join(__dirname, '..');
 const templatesDir = path.join(root, 'templates');
 const bin = path.join(root, 'bin', 'knight.js');
 
-function cli(args) {
-  return execFileSync(process.execPath, [bin].concat(args), { cwd: root, encoding: 'utf8' });
+function cli(args, options) {
+  return execFileSync(process.execPath, [bin].concat(args), Object.assign({ cwd: root, encoding: 'utf8' }, options));
+}
+
+function cliResult(args, options) {
+  return spawnSync(process.execPath, [bin].concat(args), Object.assign({ cwd: root, encoding: 'utf8' }, options));
 }
 
 function workspace() {
@@ -51,6 +55,70 @@ function main() {
     assert.strictEqual(source.ownership, 'user');
     assert.strictEqual(source.writePolicy, 'never');
     assert.strictEqual(fs.statSync(path.join(item.workspace, 'MEMORY.md')).mtimeMs, before);
+    fs.rmSync(item.rootDir, { recursive: true, force: true });
+  }
+
+  // sync honors --workspace without requiring KNIGHT_WORKSPACE.
+  {
+    const item = workspace();
+    fs.mkdirSync(item.workspace, { recursive: true });
+    fs.writeFileSync(path.join(item.workspace, 'SOUL.md'), 'explicit workspace identity\n');
+    const env = Object.assign({}, process.env);
+    delete env.KNIGHT_WORKSPACE;
+    const plan = cli(['sync', '--workspace', item.workspace, '--agent', 'claude', '--plan'], { env });
+    assert.match(plan, new RegExp(`Workspace: ${item.workspace.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}`));
+    cli(['sync', '--workspace', item.workspace, '--agent', 'claude'], { env });
+    assert.match(read(item.workspace, '.knight/core/identity.md'), /explicit workspace identity/);
+    fs.rmSync(item.rootDir, { recursive: true, force: true });
+  }
+
+  // A Claude export is projection-only, preserves source files, and fails on non-empty output.
+  {
+    const item = workspace();
+    const output = path.join(item.rootDir, 'handoff');
+    fs.mkdirSync(path.join(item.workspace, 'memory'), { recursive: true });
+    const fixtures = {
+      'SOUL.md': '# Noa identity\n',
+      'USER.md': '# Steve profile\n',
+      'MEMORY.md': '# Curated memory\n',
+      'REDLINES.md': '# Safety rules\n',
+      'PROJECTS.md': '# Knight OS\n',
+      'memory/custom-patterns.md': 'Always preserve evidence.\n',
+      'memory/2026-07-25.md': 'raw private daily log\n',
+      'CLAUDE.md': '# Existing user instructions\n',
+      '.env': 'ANTHROPIC_API_KEY=secret-value\n',
+      'contract.pdf': 'private contract\n',
+    };
+    for (const [relPath, content] of Object.entries(fixtures)) {
+      fs.mkdirSync(path.dirname(path.join(item.workspace, relPath)), { recursive: true });
+      fs.writeFileSync(path.join(item.workspace, relPath), content);
+    }
+    const before = Object.fromEntries(Object.keys(fixtures).map((relPath) => [relPath, read(item.workspace, relPath)]));
+
+    cli(['export', 'claude', '--workspace', item.workspace, '--output', output]);
+
+    assert.ok(fs.existsSync(path.join(output, 'CLAUDE.md')));
+    assert.ok(fs.existsSync(path.join(output, 'README.md')));
+    assert.ok(fs.existsSync(path.join(output, '.knight/manifest.json')));
+    for (const domain of ['identity', 'user', 'memory', 'rules', 'projects']) {
+      assert.ok(fs.existsSync(path.join(output, `.knight/core/${domain}.md`)));
+    }
+    assert.match(read(output, 'CLAUDE.md'), /\.knight\/core\/identity\.md/);
+    assert.match(read(output, '.knight/core/memory.md'), /Always preserve evidence/);
+    assert.deepStrictEqual(
+      Object.fromEntries(Object.keys(fixtures).map((relPath) => [relPath, read(item.workspace, relPath)])),
+      before
+    );
+    assert.ok(!fs.existsSync(path.join(output, '.env')));
+    assert.ok(!fs.existsSync(path.join(output, 'memory/2026-07-25.md')));
+    assert.ok(!fs.existsSync(path.join(output, 'contract.pdf')));
+    assert.ok(!read(output, '.knight/core/memory.md').includes('raw private daily log'));
+    assert.ok(!read(output, '.knight/manifest.json').includes('secret-value'));
+
+    const repeated = cliResult(['export', 'claude', '--workspace', item.workspace, '--output', output]);
+    assert.notStrictEqual(repeated.status, 0);
+    assert.match(repeated.stderr, /not empty/i);
+    assert.strictEqual(read(output, 'CLAUDE.md').includes('Knight Context Adapter'), true);
     fs.rmSync(item.rootDir, { recursive: true, force: true });
   }
 

@@ -247,6 +247,27 @@ knight sync --agent claude --plan
 knight sync --all --plan
 ```
 
+An explicit source workspace can be used for both planning and sync:
+
+```bash
+knight sync --workspace /path/to/workspace --agent claude --plan
+knight sync --workspace /path/to/workspace --agent claude
+```
+
+### Noa -> Claude Code Context Handoff
+
+Create a portable Claude Code directory from Noa's workspace:
+
+```bash
+knight sync --workspace /path/to/noa-workspace --agent claude --plan
+knight sync --workspace /path/to/noa-workspace --agent claude
+knight export claude --workspace /path/to/noa-workspace --output /path/to/claude-handoff
+cd /path/to/claude-handoff
+claude
+```
+
+The export creates `CLAUDE.md`, `.knight/manifest.json`, `.knight/core/*`, and a short `README.md`. It generates the bundle directly and does not modify the source workspace. Export is projection-only by default: it does not copy raw memory logs, `.env`, credentials, contracts, or arbitrary source files. For safe replacement behavior, the output must be absent or empty; export refuses to overwrite any non-empty directory.
+
 Adapter output strategy:
 
 - OpenClaw uses `AGENTS.md` when available; if a user-owned `AGENTS.md` already exists, Knight writes `AGENTS.openclaw.md`.
@@ -322,6 +343,10 @@ knight sync --agent openclaw
 knight sync --all # Generate context projections + all supported adapters
 knight sync --all --plan
                   # Preview sync actions without writing files
+knight sync --workspace PATH --agent claude
+                  # Sync an explicitly selected workspace
+knight export claude --workspace SOURCE --output HANDOFF
+                  # Create a projection-only Claude Code handoff in an empty directory
 knight rollback   # Restore workspace from a previous backup
 knight rollback --list
                   # List available backups without entering restore flow
