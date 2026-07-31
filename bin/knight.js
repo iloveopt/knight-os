@@ -204,6 +204,17 @@ function workspaceFromArgs(args) {
   return resolveWorkspace(config);
 }
 
+function valuesFromRepeatedOption(args, optionName) {
+  const values = [];
+  for (let i = 0; i < args.length; i += 1) {
+    if (args[i] !== optionName) continue;
+    if (!args[i + 1]) throw new Error(`${optionName} requires a value`);
+    values.push(args[i + 1]);
+    i += 1;
+  }
+  return values;
+}
+
 function commandInspect() {
   const args = process.argv.slice(3);
   const workspace = workspaceFromArgs(args);
@@ -496,18 +507,22 @@ function commandExport() {
   const target = process.argv[3];
   const args = process.argv.slice(4);
   if (target !== 'claude') {
-    console.error('Usage: knight export claude --workspace PATH --output PATH');
+    console.error('Usage: knight export claude --workspace PATH --output PATH [--include-project NAME] [--visible]');
     process.exit(1);
   }
   const workspace = workspaceFromArgs(args);
   const outputIdx = args.indexOf('--output');
   if (outputIdx === -1 || !args[outputIdx + 1]) {
-    console.error('Usage: knight export claude --workspace PATH --output PATH');
+    console.error('Usage: knight export claude --workspace PATH --output PATH [--include-project NAME] [--visible]');
     process.exit(1);
   }
+  const includeProjects = valuesFromRepeatedOption(args, '--include-project');
+  const visible = args.includes('--visible');
   const config = loadConfig();
   const result = exportClaudeHandoff(workspace, path.resolve(args[outputIdx + 1]), {
     packageVersion: VERSION,
+    includeProjects,
+    visible,
     vars: {
       aiName: config.ai_name,
       userName: config.user_name,
@@ -520,7 +535,13 @@ function commandExport() {
   console.log(`Source workspace: ${result.workspace}`);
   console.log(`Output: ${result.output}`);
   console.log(`Files: ${result.files.length}`);
-  console.log('Projection-only bundle created. Source workspace was not modified.\n');
+  if (includeProjects.length) {
+    console.log(`Included project context: ${includeProjects.join(', ')}`);
+  }
+  if (visible) {
+    console.log('Visible review context: context/');
+  }
+  console.log('Claude handoff bundle created. Source workspace was not modified.\n');
 }
 
 async function commandChat() {
@@ -621,7 +642,7 @@ switch (command) {
     console.log('  sync      Generate read-only .knight/core projections and adapter instructions');
     console.log('            Use --agent openclaw|claude|codex, --all, --workspace PATH, and --plan');
     console.log('  export    Create a portable, projection-only agent context handoff');
-    console.log('            Use `knight export claude --workspace PATH --output PATH`');
+    console.log('            Use `knight export claude --workspace PATH --output PATH [--include-project NAME] [--visible]`');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  rollback  Restore workspace from a previous backup');
     console.log('            Use --list or --dry-run for non-interactive checks');

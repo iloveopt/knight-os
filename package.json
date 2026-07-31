@@ -1,6 +1,6 @@
 {
   "name": "knight-os",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Local-first personal AI Context Hub — bring your own agent, keep your context",
   "main": "bin/knight.js",
   "bin": {

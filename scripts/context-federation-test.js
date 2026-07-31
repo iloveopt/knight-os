@@ -85,6 +85,10 @@ function main() {
       'PROJECTS.md': '# Knight OS\n',
       'memory/custom-patterns.md': 'Always preserve evidence.\n',
       'memory/2026-07-25.md': 'raw private daily log\n',
+      'memory/projects/knight/main.md': '# Knight task context\n',
+      'memory/projects/knight/context-snapshot.md': '# Knight snapshot\n',
+      'memory/projects/knight/private-notes.md': 'do not export arbitrary project files\n',
+      'memory/projects/arti/main.md': '# Arti context\n',
       'CLAUDE.md': '# Existing user instructions\n',
       '.env': 'ANTHROPIC_API_KEY=secret-value\n',
       'contract.pdf': 'private contract\n',
@@ -111,9 +115,50 @@ function main() {
     );
     assert.ok(!fs.existsSync(path.join(output, '.env')));
     assert.ok(!fs.existsSync(path.join(output, 'memory/2026-07-25.md')));
+    assert.ok(!fs.existsSync(path.join(output, 'memory/projects/knight/main.md')));
+    assert.ok(!fs.existsSync(path.join(output, 'context/core/identity.md')));
     assert.ok(!fs.existsSync(path.join(output, 'contract.pdf')));
     assert.ok(!read(output, '.knight/core/memory.md').includes('raw private daily log'));
     assert.ok(!read(output, '.knight/manifest.json').includes('secret-value'));
+
+    const projectOutput = path.join(item.rootDir, 'handoff-project');
+    cli(['export', 'claude', '--workspace', item.workspace, '--output', projectOutput, '--include-project', 'knight']);
+    assert.strictEqual(read(projectOutput, 'memory/projects/knight/main.md'), '# Knight task context\n');
+    assert.strictEqual(read(projectOutput, 'memory/projects/knight/context-snapshot.md'), '# Knight snapshot\n');
+    assert.ok(!fs.existsSync(path.join(projectOutput, 'memory/projects/knight/private-notes.md')));
+    assert.ok(!fs.existsSync(path.join(projectOutput, 'memory/projects/arti/main.md')));
+    assert.ok(!fs.existsSync(path.join(projectOutput, 'memory/2026-07-25.md')));
+    assert.ok(!read(projectOutput, '.knight/manifest.json').includes('secret-value'));
+
+    const visibleOutput = path.join(item.rootDir, 'handoff-visible');
+    cli(['export', 'claude', '--workspace', item.workspace, '--output', visibleOutput, '--include-project', 'knight', '--visible']);
+    assert.strictEqual(read(visibleOutput, 'context/core/identity.md'), read(visibleOutput, '.knight/core/identity.md'));
+    assert.strictEqual(read(visibleOutput, 'context/projects/knight/main.md'), '# Knight task context\n');
+    assert.strictEqual(read(visibleOutput, 'context/projects/knight/context-snapshot.md'), '# Knight snapshot\n');
+    assert.ok(!fs.existsSync(path.join(visibleOutput, 'context/projects/knight/private-notes.md')));
+    const visibleManifest = JSON.parse(read(visibleOutput, '.knight/manifest.json'));
+    assert.strictEqual(visibleManifest.export.visible, true);
+    assert.ok(visibleManifest.export.visibleFiles.includes('context/core/identity.md'));
+    assert.ok(visibleManifest.export.visibleFiles.includes('context/projects/knight/main.md'));
+    assert.ok(!read(visibleOutput, '.knight/manifest.json').includes('secret-value'));
+
+    const invalidOutput = path.join(item.rootDir, 'handoff-invalid');
+    const invalid = cliResult(['export', 'claude', '--workspace', item.workspace, '--output', invalidOutput, '--include-project', '../secrets']);
+    assert.notStrictEqual(invalid.status, 0);
+    assert.match(invalid.stderr, /invalid project/i);
+    assert.ok(!fs.existsSync(path.join(item.rootDir, 'secrets')));
+    const absoluteInvalid = cliResult(['export', 'claude', '--workspace', item.workspace, '--output', path.join(item.rootDir, 'handoff-absolute-invalid'), '--include-project', '/tmp/x']);
+    assert.notStrictEqual(absoluteInvalid.status, 0);
+    assert.match(absoluteInvalid.stderr, /invalid project/i);
+
+    const externalProject = path.join(item.rootDir, 'external-project');
+    fs.mkdirSync(externalProject, { recursive: true });
+    fs.writeFileSync(path.join(externalProject, 'main.md'), 'external project context\n');
+    fs.rmSync(path.join(item.workspace, 'memory/projects/knight'), { recursive: true, force: true });
+    fs.symlinkSync(externalProject, path.join(item.workspace, 'memory/projects/knight'), 'dir');
+    const symlinkInvalid = cliResult(['export', 'claude', '--workspace', item.workspace, '--output', path.join(item.rootDir, 'handoff-symlink-invalid'), '--include-project', 'knight']);
+    assert.notStrictEqual(symlinkInvalid.status, 0);
+    assert.match(symlinkInvalid.stderr, /outside memory\/projects/i);
 
     const repeated = cliResult(['export', 'claude', '--workspace', item.workspace, '--output', output]);
     assert.notStrictEqual(repeated.status, 0);

@@ -262,11 +262,19 @@ Create a portable Claude Code directory from Noa's workspace:
 knight sync --workspace /path/to/noa-workspace --agent claude --plan
 knight sync --workspace /path/to/noa-workspace --agent claude
 knight export claude --workspace /path/to/noa-workspace --output /path/to/claude-handoff
+knight export claude --workspace /path/to/noa-workspace --output /path/to/claude-handoff --include-project knight
+knight export claude --workspace /path/to/noa-workspace --output /path/to/claude-handoff --include-project knight --visible
 cd /path/to/claude-handoff
 claude
 ```
 
-The export creates `CLAUDE.md`, `.knight/manifest.json`, `.knight/core/*`, and a short `README.md`. It generates the bundle directly and does not modify the source workspace. Export is projection-only by default: it does not copy raw memory logs, `.env`, credentials, contracts, or arbitrary source files. For safe replacement behavior, the output must be absent or empty; export refuses to overwrite any non-empty directory.
+The export creates `CLAUDE.md`, `.knight/manifest.json`, `.knight/core/*`, and a short `README.md`. It generates the bundle directly and does not modify the source workspace. Export is projection-only by default: it does not copy raw memory logs, `.env`, credentials, contracts, project detail files, or arbitrary source files.
+
+When Claude Code needs the working context for one known project, pass `--include-project <name>`. Knight validates the project name as a safe path segment and only copies existing `memory/projects/<name>/main.md` and `memory/projects/<name>/context-snapshot.md`. It does not recurse through the project directory and does not include other projects.
+
+When a human needs to review the bundle before handing it to an agent, pass `--visible`. Knight keeps `.knight/core/*` as the canonical agent context and adds readable mirror files under `context/core/*`. If project context is included, `--visible` also mirrors those selected files under `context/projects/<name>/`.
+
+For safe replacement behavior, the output must be absent or empty; export refuses to overwrite any non-empty directory.
 
 Adapter output strategy:
 
@@ -347,6 +355,10 @@ knight sync --workspace PATH --agent claude
                   # Sync an explicitly selected workspace
 knight export claude --workspace SOURCE --output HANDOFF
                   # Create a projection-only Claude Code handoff in an empty directory
+knight export claude --workspace SOURCE --output HANDOFF --include-project NAME
+                  # Add selected project main.md/context-snapshot.md only
+knight export claude --workspace SOURCE --output HANDOFF --include-project NAME --visible
+                  # Add a human-readable context/ review mirror
 knight rollback   # Restore workspace from a previous backup
 knight rollback --list
                   # List available backups without entering restore flow
