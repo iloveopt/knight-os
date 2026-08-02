@@ -4,7 +4,7 @@ A local-first personal AI Context Hub.
 
 > **Bring your own agent. Keep your context.**
 
-Knight OS connects user-owned identity, preferences, memory, rules, and project context to Claude, Codex, OpenClaw, and other agents through safe generated projections and adapters. Your files remain the source of truth; Knight is not a cloud service or a multi-agent scheduler.
+Knight OS connects user-owned identity, preferences, memory, rules, and project context to Claude, Codex, Hermes, OpenClaw, and other agents through safe generated projections and adapters. Your files remain the source of truth; Knight is not a cloud service or a multi-agent scheduler.
 
 ## Prerequisites
 
@@ -231,6 +231,7 @@ Generate one adapter instruction file:
 ```bash
 knight sync --agent claude
 knight sync --agent codex
+knight sync --agent hermes
 knight sync --agent openclaw
 ```
 
@@ -262,17 +263,38 @@ Create a portable Claude Code directory from Noa's workspace:
 knight sync --workspace /path/to/noa-workspace --agent claude --plan
 knight sync --workspace /path/to/noa-workspace --agent claude
 knight export claude --workspace /path/to/noa-workspace --output /path/to/claude-handoff
+knight export claude --workspace /path/to/noa-workspace --output /path/to/claude-handoff --include-project knight
+knight export claude --workspace /path/to/noa-workspace --output /path/to/claude-handoff --include-project knight --visible
 cd /path/to/claude-handoff
 claude
 ```
 
-The export creates `CLAUDE.md`, `.knight/manifest.json`, `.knight/core/*`, and a short `README.md`. It generates the bundle directly and does not modify the source workspace. Export is projection-only by default: it does not copy raw memory logs, `.env`, credentials, contracts, or arbitrary source files. For safe replacement behavior, the output must be absent or empty; export refuses to overwrite any non-empty directory.
+The export creates `CLAUDE.md`, `.knight/manifest.json`, `.knight/core/*`, and a short `README.md`. It generates the bundle directly and does not modify the source workspace. Export is projection-only by default: it does not copy raw memory logs, `.env`, credentials, contracts, project detail files, or arbitrary source files.
+
+When Claude Code needs the working context for one known project, pass `--include-project <name>`. Knight validates the project name as a safe path segment and only copies existing `memory/projects/<name>/main.md` and `memory/projects/<name>/context-snapshot.md`. It does not recurse through the project directory and does not include other projects.
+
+When a human needs to review the bundle before handing it to an agent, pass `--visible`. Knight keeps `.knight/core/*` as the canonical agent context and adds readable mirror files under `context/core/*`. If project context is included, `--visible` also mirrors those selected files under `context/projects/<name>/`.
+
+For safe replacement behavior, the output must be absent or empty; export refuses to overwrite any non-empty directory.
+
+### Hermes Context Handoff
+
+Hermes Agent's current project-context convention uses `.hermes.md` as its highest-priority project entry. Knight therefore generates that exact file, which only directs Hermes to the read-only `.knight/core/*` projections:
+
+```bash
+knight sync --workspace /path/to/workspace --agent hermes --plan
+knight sync --workspace /path/to/workspace --agent hermes
+knight export hermes --workspace /path/to/workspace --output /path/to/hermes-handoff
+```
+
+Open the exported directory as Hermes's working directory. Hermes also recognizes `HERMES.md`, but it is not used as a sidecar: a user-owned `.hermes.md` has higher priority, so generating a fallback would not safely load Knight context. In that case sync preserves the user file and reports a conflict. Hermes global `SOUL.md` is intentionally not written or exported; Knight's user-owned source is projected only under `.knight/core/identity.md`.
 
 Adapter output strategy:
 
 - OpenClaw uses `AGENTS.md` when available; if a user-owned `AGENTS.md` already exists, Knight writes `AGENTS.openclaw.md`.
 - Claude uses `CLAUDE.md` when available; if a user-owned `CLAUDE.md` already exists, Knight writes `CLAUDE.knight.md`.
 - Codex uses `AGENTS.codex.md` by default so it does not collide with OpenClaw's `AGENTS.md`.
+- Hermes uses `.hermes.md`, Hermes's highest-priority project context entry. A user-owned `.hermes.md` is preserved; there is no unsafe fallback sidecar.
 
 Knight records generated hashes and ownership in `.knight/manifest.json`. Existing user instruction files are never overwritten by federation: Knight selects a sidecar where available or reports a conflict.
 
@@ -338,6 +360,7 @@ knight adapters list
                   # List available agent adapters
 knight sync --agent claude
 knight sync --agent codex
+knight sync --agent hermes
 knight sync --agent openclaw
                   # Generate context projections + one adapter instruction file
 knight sync --all # Generate context projections + all supported adapters
@@ -347,6 +370,12 @@ knight sync --workspace PATH --agent claude
                   # Sync an explicitly selected workspace
 knight export claude --workspace SOURCE --output HANDOFF
                   # Create a projection-only Claude Code handoff in an empty directory
+knight export claude --workspace SOURCE --output HANDOFF --include-project NAME
+                  # Add selected project main.md/context-snapshot.md only
+knight export claude --workspace SOURCE --output HANDOFF --include-project NAME --visible
+                  # Add a human-readable context/ review mirror
+knight export hermes --workspace SOURCE --output HANDOFF
+                  # Create a projection-only Hermes handoff in an empty directory
 knight rollback   # Restore workspace from a previous backup
 knight rollback --list
                   # List available backups without entering restore flow
