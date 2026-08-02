@@ -12,7 +12,7 @@ const { dashboard } = require('../src/dashboard');
 const { rollback } = require('../src/rollback');
 const { doctor } = require('../src/doctor');
 const { getFederationStatus, inspectWorkspace } = require('../src/federation');
-const { exportClaudeHandoff } = require('../src/export');
+const { exportClaudeHandoff, exportHermesHandoff } = require('../src/export');
 const {
   applyAdoptionPlan,
   createAdoptionPlan,
@@ -453,7 +453,7 @@ function commandSync() {
   const agent = agentIdx !== -1 ? args[agentIdx + 1] : null;
 
   if (!all && !agent) {
-    console.error('Usage: knight sync --agent <openclaw|claude|codex> [--workspace PATH] [--plan]');
+    console.error('Usage: knight sync --agent <openclaw|claude|codex|hermes> [--workspace PATH] [--plan]');
     console.error('       knight sync --all [--workspace PATH] [--plan]');
     process.exit(1);
   }
@@ -506,20 +506,21 @@ function commandSync() {
 function commandExport() {
   const target = process.argv[3];
   const args = process.argv.slice(4);
-  if (target !== 'claude') {
-    console.error('Usage: knight export claude --workspace PATH --output PATH [--include-project NAME] [--visible]');
+  if (!['claude', 'hermes'].includes(target)) {
+    console.error('Usage: knight export <claude|hermes> --workspace PATH --output PATH [--include-project NAME] [--visible]');
     process.exit(1);
   }
   const workspace = workspaceFromArgs(args);
   const outputIdx = args.indexOf('--output');
   if (outputIdx === -1 || !args[outputIdx + 1]) {
-    console.error('Usage: knight export claude --workspace PATH --output PATH [--include-project NAME] [--visible]');
+    console.error('Usage: knight export <claude|hermes> --workspace PATH --output PATH [--include-project NAME] [--visible]');
     process.exit(1);
   }
   const includeProjects = valuesFromRepeatedOption(args, '--include-project');
   const visible = args.includes('--visible');
   const config = loadConfig();
-  const result = exportClaudeHandoff(workspace, path.resolve(args[outputIdx + 1]), {
+  const exportHandoff = target === 'hermes' ? exportHermesHandoff : exportClaudeHandoff;
+  const result = exportHandoff(workspace, path.resolve(args[outputIdx + 1]), {
     packageVersion: VERSION,
     includeProjects,
     visible,
@@ -531,7 +532,7 @@ function commandExport() {
       channel: 'direct',
     },
   });
-  console.log('\nKnight OS — Claude Code Context Handoff');
+  console.log(`\nKnight OS — ${target === 'hermes' ? 'Hermes' : 'Claude Code'} Context Handoff`);
   console.log(`Source workspace: ${result.workspace}`);
   console.log(`Output: ${result.output}`);
   console.log(`Files: ${result.files.length}`);
@@ -541,7 +542,7 @@ function commandExport() {
   if (visible) {
     console.log('Visible review context: context/');
   }
-  console.log('Claude handoff bundle created. Source workspace was not modified.\n');
+  console.log(`${target === 'hermes' ? 'Hermes' : 'Claude'} handoff bundle created. Source workspace was not modified.\n`);
 }
 
 async function commandChat() {
@@ -640,9 +641,9 @@ switch (command) {
     console.log('  adapters  List available agent adapters');
     console.log('            Use `knight adapters list`');
     console.log('  sync      Generate read-only .knight/core projections and adapter instructions');
-    console.log('            Use --agent openclaw|claude|codex, --all, --workspace PATH, and --plan');
+    console.log('            Use --agent openclaw|claude|codex|hermes, --all, --workspace PATH, and --plan');
     console.log('  export    Create a portable, projection-only agent context handoff');
-    console.log('            Use `knight export claude --workspace PATH --output PATH [--include-project NAME] [--visible]`');
+    console.log('            Use `knight export claude|hermes --workspace PATH --output PATH [--include-project NAME] [--visible]`');
     console.log('  dashboard Generate a local HTML dashboard from your workspace data');
     console.log('  rollback  Restore workspace from a previous backup');
     console.log('            Use --list or --dry-run for non-interactive checks');

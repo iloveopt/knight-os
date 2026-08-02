@@ -23,6 +23,7 @@ const ADAPTERS = {
   openclaw: { name: 'openclaw', label: 'OpenClaw', primaryPath: 'AGENTS.md', sidecarPath: 'AGENTS.openclaw.md', description: 'OpenClaw instructions pointing to Knight context projections.' },
   claude: { name: 'claude', label: 'Claude', primaryPath: 'CLAUDE.md', sidecarPath: 'CLAUDE.knight.md', description: 'Claude instructions pointing to Knight context projections.' },
   codex: { name: 'codex', label: 'Codex', primaryPath: 'AGENTS.codex.md', sidecarPath: 'AGENTS.codex.knight.md', description: 'Codex instructions kept separate from OpenClaw AGENTS.md.' },
+  hermes: { name: 'hermes', label: 'Hermes', primaryPath: '.hermes.md', sidecarPath: null, description: 'Hermes project instructions using its highest-priority .hermes.md entry.' },
 };
 
 function listAdapters() { return Object.values(ADAPTERS); }
@@ -101,6 +102,9 @@ function targetState(workspace, registry, relPath, content, kind) {
 function chooseAdapterTarget(workspace, registry, adapter, content) {
   const primary = targetState(workspace, registry, adapter.primaryPath, content, 'adapter');
   if (primary.action !== 'unmanaged') return primary;
+  // Hermes gives .hermes.md precedence over every other project-context entry.
+  // A generated fallback would be ignored, so preserve an unmanaged primary and report conflict.
+  if (!adapter.sidecarPath) return Object.assign(primary, { action: 'conflict', reason: 'primary adapter path is user-owned; no safe sidecar exists for this agent' });
   const sidecar = targetState(workspace, registry, adapter.sidecarPath, content, 'adapter sidecar');
   if (sidecar.action === 'unmanaged') return Object.assign(sidecar, { action: 'conflict', conflict: adapter.primaryPath, reason: 'primary and sidecar are both user-owned' });
   return Object.assign(sidecar, { conflict: adapter.primaryPath });
@@ -185,7 +189,7 @@ function applySyncPlan(plan, opts) {
 function printAdapters() {
   console.log('\nKnight OS Agent Adapters');
   console.log('Bring your own agent. Keep your context. Knight is not a scheduler.\n');
-  listAdapters().forEach((adapter) => console.log(`- ${adapter.name}\n  primary: ${adapter.primaryPath}\n  sidecar: ${adapter.sidecarPath}\n  ${adapter.description}`));
+  listAdapters().forEach((adapter) => console.log(`- ${adapter.name}\n  primary: ${adapter.primaryPath}${adapter.sidecarPath ? `\n  sidecar: ${adapter.sidecarPath}` : ''}\n  ${adapter.description}`));
   console.log('');
 }
 function printSyncPlan(plan) {

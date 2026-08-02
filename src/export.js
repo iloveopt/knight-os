@@ -2,7 +2,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { createSyncPlan } = require('./adapters');
+const { ADAPTERS, createSyncPlan } = require('./adapters');
 
 function isDirectoryEmpty(dirPath) {
   return fs.readdirSync(dirPath).length === 0;
@@ -130,7 +130,7 @@ function writeVisibleContextMirror(output, plan, includedProjectFiles) {
   return visibleFiles;
 }
 
-function exportClaudeHandoff(workspace, output, opts) {
+function exportAgentHandoff(agent, workspace, output, opts) {
   opts = opts || {};
   workspace = path.resolve(workspace);
   output = path.resolve(output);
@@ -138,10 +138,14 @@ function exportClaudeHandoff(workspace, output, opts) {
   assertSafeExportPaths(workspace, output);
 
   const plan = createSyncPlan(workspace, {
-    agent: 'claude',
+    agent,
     vars: opts.vars || {},
   });
   const adapter = plan.adapters[0];
+  // The output directory is empty by contract, so use the agent's canonical entry
+  // rather than a source-workspace sidecar selected to protect user-owned files.
+  const adapterPath = ADAPTERS[agent].primaryPath;
+  const agentLabel = adapter.label;
   const now = opts.now || new Date().toISOString();
   const packageVersion = opts.packageVersion || '0.5.1';
   const outputExisted = fs.existsSync(output);
@@ -153,7 +157,7 @@ function exportClaudeHandoff(workspace, output, opts) {
     for (const item of plan.core) {
       fs.writeFileSync(path.join(output, item.path), item.content, 'utf8');
     }
-    fs.writeFileSync(path.join(output, 'CLAUDE.md'), adapter.content, 'utf8');
+    fs.writeFileSync(path.join(output, adapterPath), adapter.content, 'utf8');
     includedProjectFiles = copyIncludedProjectFiles(workspace, output, includeProjects);
     if (opts.visible) {
       visibleFiles = writeVisibleContextMirror(output, plan, includedProjectFiles);
@@ -163,7 +167,7 @@ function exportClaudeHandoff(workspace, output, opts) {
       schemaVersion: 2,
       version: 1,
       export: {
-        format: 'claude-handoff',
+        format: `${agent}-handoff`,
         projectionOnly: includeProjects.length === 0,
         includeProjects,
         includedProjectFiles,
@@ -182,8 +186,8 @@ function exportClaudeHandoff(workspace, output, opts) {
         generatedAt: now,
       })),
       adapters: [{
-        agent: 'claude',
-        path: 'CLAUDE.md',
+        agent,
+        path: adapterPath,
         ownership: 'knight',
         generatedHash: adapter.desiredHash,
         generatedAt: now,
@@ -196,9 +200,9 @@ function exportClaudeHandoff(workspace, output, opts) {
       'utf8'
     );
     fs.writeFileSync(path.join(output, 'README.md'), [
-      '# Knight OS Claude Code Handoff',
+      `# Knight OS ${agentLabel} Handoff`,
       '',
-      'Open this directory in Claude Code. `CLAUDE.md` loads the generated context projections in `.knight/core/`.',
+      `Open this directory as a ${agentLabel} workspace. \`${adapterPath}\` loads the generated context projections in \`.knight/core/\`.`,
       '',
       opts.visible
         ? 'Human-readable review copies are available in `context/`. The `.knight/` files remain the canonical agent context.'
@@ -221,11 +225,19 @@ function exportClaudeHandoff(workspace, output, opts) {
   return {
     workspace,
     output,
-    files: ['CLAUDE.md', 'README.md', '.knight/manifest.json']
+    files: [adapterPath, 'README.md', '.knight/manifest.json']
       .concat(plan.core.map((item) => item.path))
       .concat(includedProjectFiles)
       .concat(visibleFiles),
   };
 }
 
-module.exports = { exportClaudeHandoff };
+function exportClaudeHandoff(workspace, output, opts) {
+  return exportAgentHandoff('claude', workspace, output, opts);
+}
+
+function exportHermesHandoff(workspace, output, opts) {
+  return exportAgentHandoff('hermes', workspace, output, opts);
+}
+
+module.exports = { exportAgentHandoff, exportClaudeHandoff, exportHermesHandoff };

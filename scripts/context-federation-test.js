@@ -39,6 +39,8 @@ function main() {
   assert.match(help, /inspect\s+Classify context sources/);
   assert.match(help, /status\s+Report source drift/);
   assert.match(help, /--workspace PATH and --json/);
+  assert.match(help, /--agent openclaw\|claude\|codex\|hermes/);
+  assert.match(help, /export claude\|hermes --workspace PATH --output PATH/);
 
   // Inspection is read-only and unmanaged known files default to user ownership.
   {
@@ -69,6 +71,42 @@ function main() {
     assert.match(plan, new RegExp(`Workspace: ${item.workspace.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&')}`));
     cli(['sync', '--workspace', item.workspace, '--agent', 'claude'], { env });
     assert.match(read(item.workspace, '.knight/core/identity.md'), /explicit workspace identity/);
+    fs.rmSync(item.rootDir, { recursive: true, force: true });
+  }
+
+  // Hermes uses its official highest-priority project entry, .hermes.md. Sync and export never copy source files.
+  {
+    const item = workspace();
+    const output = path.join(item.rootDir, 'hermes-handoff');
+    fs.mkdirSync(item.workspace, { recursive: true });
+    fs.writeFileSync(path.join(item.workspace, 'SOUL.md'), 'Hermes identity\n');
+    fs.writeFileSync(path.join(item.workspace, 'MEMORY.md'), 'Hermes memory\n');
+
+    const plan = cli(['sync', '--workspace', item.workspace, '--agent', 'hermes', '--plan']);
+    assert.match(plan, /\.hermes\.md \(hermes;/);
+    cli(['sync', '--workspace', item.workspace, '--agent', 'hermes']);
+    assert.match(read(item.workspace, '.hermes.md'), /Knight-managed adapter/);
+    assert.match(read(item.workspace, '.hermes.md'), /\.knight\/core\/identity\.md/);
+    assert.match(read(item.workspace, '.hermes.md'), /\.knight\/core\/projects\.md/);
+    const registry = JSON.parse(read(item.workspace, '.knight/manifest.json'));
+    assert.ok(registry.adapters.some((entry) => entry.agent === 'hermes' && entry.path === '.hermes.md'));
+
+    cli(['export', 'hermes', '--workspace', item.workspace, '--output', output]);
+    assert.match(read(output, '.hermes.md'), /Knight Context Adapter/);
+    assert.match(read(output, '.hermes.md'), /\.knight\/core\/rules\.md/);
+    assert.ok(fs.existsSync(path.join(output, '.knight/core/memory.md')));
+    assert.ok(!fs.existsSync(path.join(output, 'SOUL.md')));
+    assert.strictEqual(JSON.parse(read(output, '.knight/manifest.json')).export.format, 'hermes-handoff');
+
+    // A user-owned highest-priority .hermes.md cannot be safely bypassed with HERMES.md.
+    const conflict = workspace();
+    fs.mkdirSync(conflict.workspace, { recursive: true });
+    fs.writeFileSync(path.join(conflict.workspace, '.hermes.md'), '# user context\n');
+    const result = sync(conflict.workspace, 'hermes', '2026-08-02T00:00:00.000Z');
+    assert.strictEqual(read(conflict.workspace, '.hermes.md'), '# user context\n');
+    assert.ok(result.conflicts.some((entry) => entry.path === '.hermes.md'));
+    assert.ok(!fs.existsSync(path.join(conflict.workspace, 'HERMES.md')));
+    fs.rmSync(conflict.rootDir, { recursive: true, force: true });
     fs.rmSync(item.rootDir, { recursive: true, force: true });
   }
 
